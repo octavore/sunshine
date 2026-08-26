@@ -88,3 +88,9 @@ public struct SunshineUpdateSettingsView: View {
         .frame(width: 420)
     }
 }
+
+#if DEBUG
+#Preview {
+    SunshineUpdateSettingsView(updater: PreviewSupport.updater(), appName: "Example App")
+}
+#endif

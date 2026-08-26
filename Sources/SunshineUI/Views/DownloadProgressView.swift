@@ -24,3 +24,7 @@ public struct DownloadProgressView: View {
         .frame(width: 320)
     }
 }
+
+#Preview {
+    DownloadProgressView(fractionComplete: 0.62, onCancel: {})
+}

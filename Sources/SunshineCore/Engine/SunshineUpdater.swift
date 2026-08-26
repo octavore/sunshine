@@ -11,7 +11,7 @@ public final class SunshineUpdater: ObservableObject {
     public weak var delegate: (any SunshineUpdaterDelegate)?
 
     private var configuration: SunshineConfiguration
-    private let client: GitHubReleasesClient
+    private let client: any ReleasesProviding
     private let verifier: UpdateVerifier
     private let store: SkipAndRemindStore
     private let preferencesStore: UpdatePreferencesStore
@@ -26,9 +26,12 @@ public final class SunshineUpdater: ObservableObject {
     private var schedulingTask: Task<Void, Never>?
     private var currentVerified: VerifiedUpdate?
 
-    public init(configuration: SunshineConfiguration) {
+    /// - Parameter releasesProvider: Source of release data. Defaults to a real
+    ///   `GitHubReleasesClient`; pass a `StaticReleasesProvider` to drive this updater from a
+    ///   fixed list of releases instead, e.g. for SwiftUI previews, examples, or tests.
+    public init(configuration: SunshineConfiguration, releasesProvider: (any ReleasesProviding)? = nil) {
         self.configuration = configuration
-        self.client = GitHubReleasesClient(token: configuration.githubToken)
+        self.client = releasesProvider ?? GitHubReleasesClient(token: configuration.githubToken)
         self.verifier = UpdateVerifier(requireNotarization: configuration.requireNotarization)
         let bundleID = Bundle.main.bundleIdentifier ?? "\(configuration.owner).\(configuration.repo)"
         self.bundleIdentifier = bundleID

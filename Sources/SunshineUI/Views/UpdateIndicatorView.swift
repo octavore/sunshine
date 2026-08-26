@@ -51,3 +51,10 @@ public struct UpdateIndicatorView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview {
+    UpdateIndicatorView(controller: PreviewSupport.controller(), appName: "Example App")
+        .padding(40)
+}
+#endif

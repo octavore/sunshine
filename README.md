@@ -24,7 +24,7 @@ the app currently running.
 Add Sunshine as a Swift Package dependency:
 
 ```swift
-.package(url: "https://github.com/<you>/sunshine.git", from: "1.0.0")
+.package(url: "https://github.com/octavore/sunshine.git", from: "1.0.0")
 ```
 
 Two products are available:
@@ -91,10 +91,49 @@ struct MyApp: App {
 }
 ```
 
-`.sunshineUpdater(_:)` attaches the update sheet and starts the background
-check loop if `checkInterval` is set. The sheet shows the app icon, version
-diff, rendered release notes, and Install & Relaunch / Remind Me Later / Skip
-This Version actions.
+`.sunshineUpdater(_:)` attaches the update UI and starts the background
+check loop if `checkInterval` is set. It defaults to a modal sheet showing
+the app icon (auto-detected from `Bundle.main`'s `CFBundleIconFile`/
+`CFBundleIconName`, or pass `appIcon:` to override), version diff, rendered
+release notes, and Install & Relaunch / Remind Me Later / Skip This Version
+actions. If there's no update, "Check for Updates…" (triggered via
+`CheckForUpdatesCommand`) shows a "You're up to date!" alert instead.
+
+### Less obtrusive: corner indicator
+
+Pass `style: .cornerIndicator` to replace the auto-popping sheet with a
+small badge pinned to the window's bottom-trailing corner. It only appears
+when there's something to show (an update or an error) and stays out of the
+way until the user opens it.
+
+```swift
+.sunshineUpdater(updaterUI, style: .cornerIndicator)
+```
+
+Tapping the badge opens the same update-review UI in a popover. The
+"Check for Updates…" menu command still surfaces its result via alert/sheet
+regardless of `style`, since it's a deliberate user action rather than a
+passive notification.
+
+### Settings pane
+
+`SunshineUpdateSettingsView` is a prebuilt "Updates" pane for a `Settings`
+scene, in the style of apps like Tailscale's About tab — app identity,
+Automatically Check For Updates / Install Updates Automatically toggles, a
+Stable/Pre-release channel picker, and a Check Now button with a last-check
+timestamp:
+
+```swift
+Settings {
+    SunshineUpdateSettingsView(updater: updaterUI.updater)
+}
+```
+
+Its toggles read and write live settings on `SunshineUpdater`
+(`isAutomaticallyCheckingForUpdates`, `automationLevel`, `allowPrereleases`),
+which persist to `UserDefaults` per bundle identifier and take effect
+immediately — no relaunch or extra wiring required. Pass
+`showChannelPicker: false` to hide the prerelease picker.
 
 ## Usage: headless
 
@@ -133,20 +172,38 @@ for await event in updater.events {
 `SunshineUpdaterDelegate` is also available as a callback-style alternative
 to the event stream.
 
+### Live settings
+
+`SunshineUpdater` exposes three settings from `SunshineConfiguration` as
+mutable properties, so they can be changed at runtime (e.g. from a settings
+UI) instead of only at construction. Each setter persists the new value to
+`UserDefaults`, scoped per bundle identifier, and takes effect immediately:
+
+```swift
+updater.isAutomaticallyCheckingForUpdates // get/set; starts/stops the background loop
+updater.automationLevel                   // get/set: .manual / .autoDownload / .autoDownloadAndInstall
+updater.allowPrereleases                  // get/set
+updater.lastCheckDate                     // read-only; last check attempt (success or failure)
+```
+
+A persisted value, once set, overrides the `SunshineConfiguration` value
+passed at the next launch. `SunshineUpdateSettingsView` (see below) is a
+ready-made UI for these.
+
 ## Configuration reference
 
 `SunshineConfiguration` fields (`owner`/`repo` required, the rest optional):
 
-| Field | Default | Purpose |
-|---|---|---|
-| `owner`, `repo` | — | GitHub repository to check for releases |
-| `allowPrereleases` | `false` | Consider releases marked "prerelease" |
-| `assetMatcher` | `.zipOrDmgContainingApp()` | How to pick an asset from a release; also accepts `.regex` or `.custom` |
-| `githubToken` | `nil` | Raises the API rate limit from 60/hr to 5000/hr; recommended if checking more than hourly |
-| `checkInterval` | `nil` | Seconds between automatic background checks; `nil` disables automatic checking |
-| `installLocation` | `nil` | Overrides the install path; defaults to `Bundle.main.bundleURL` |
-| `requireNotarization` | `true` | Also require a passing Gatekeeper/notarization check, not just a Team ID match |
-| `automationLevel` | `.manual` | `.manual` (prompt only), `.autoDownload` (auto-download, prompt to install), or `.autoDownloadAndInstall` (fully silent) |
+| Field                 | Default                    | Purpose                                                                                                                  |
+| --------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `owner`, `repo`       | —                          | GitHub repository to check for releases                                                                                  |
+| `allowPrereleases`    | `false`                    | Consider releases marked "prerelease"                                                                                    |
+| `assetMatcher`        | `.zipOrDmgContainingApp()` | How to pick an asset from a release; also accepts `.regex` or `.custom`                                                  |
+| `githubToken`         | `nil`                      | Raises the API rate limit from 60/hr to 5000/hr; recommended if checking more than hourly                                |
+| `checkInterval`       | `nil`                      | Seconds between automatic background checks; `nil` disables automatic checking                                           |
+| `installLocation`     | `nil`                      | Overrides the install path; defaults to `Bundle.main.bundleURL`                                                          |
+| `requireNotarization` | `true`                     | Also require a passing Gatekeeper/notarization check, not just a Team ID match                                           |
+| `automationLevel`     | `.manual`                  | `.manual` (prompt only), `.autoDownload` (auto-download, prompt to install), or `.autoDownloadAndInstall` (fully silent) |
 
 Automatic checks run on launch (rate-limited) and every `checkInterval`
 seconds, with exponential backoff on repeated failures.
@@ -181,6 +238,42 @@ This project uses [axo](https://github.com) for task running:
 axo build   # swift build
 axo test    # swift test
 axo clean   # swift package clean
+```
+
+## Example app
+
+`Sources/SunshineExample` is a small SwiftUI app that showcases every view
+`SunshineUI` provides — `SunshineUpdateSettingsView`, `UpdateAvailableView`,
+`UpdateIndicatorView`, `UpdateErrorView`, and `DownloadProgressView` — picked
+from a sidebar. It runs against a fixed, in-memory list of releases via
+`StaticReleasesProvider` (see below), so it never hits the network.
+
+Build and run it with [strudel](https://github.com/octavore/strudel)
+(configured in `strudel.toml`):
+
+```
+strudel run
+```
+
+### Supplying releases explicitly
+
+`StaticReleasesProvider` conforms to `ReleasesProviding` (the same protocol
+`GitHubReleasesClient` uses) and serves a fixed `[GitHubRelease]` array
+instead of hitting the GitHub API. Pass one to `SunshineUpdater` to drive it
+from known data — this is what the example app and `SunshineUI`'s
+`#Preview`s use:
+
+```swift
+import SunshineCore
+
+let releases: [GitHubRelease] = [
+    GitHubRelease(tagName: "2.1.0", body: "## What's New\n\n- Faster launch times."),
+]
+
+let updater = SunshineUpdater(
+    configuration: SunshineConfiguration(owner: "acme", repo: "myapp"),
+    releasesProvider: StaticReleasesProvider(releases: releases)
+)
 ```
 
 ## Remaining work

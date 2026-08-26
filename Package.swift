@@ -20,6 +20,11 @@ let package = Package(
             dependencies: ["SunshineCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        .executableTarget(
+            name: "SunshineExample",
+            dependencies: ["SunshineCore", "SunshineUI"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
         .testTarget(
             name: "SunshineCoreTests",
             dependencies: ["SunshineCore"]

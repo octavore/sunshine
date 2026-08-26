@@ -24,3 +24,10 @@ public struct UpdateErrorView: View {
         .frame(width: 380)
     }
 }
+
+#Preview {
+    UpdateErrorView(
+        message: "The GitHub API rate limit was exceeded. Try again after 5:00 PM.",
+        releaseURL: URL(string: "https://github.com/example/example/releases/latest")
+    )
+}

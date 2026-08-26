@@ -1,0 +1,7 @@
+[app]
+name      = "SunshineExample"
+bundle_id = "com.breakfastlabs.sunshine.example"
+version   = "1.0.0"
+
+[build]
+target_name = "SunshineExample"

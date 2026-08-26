@@ -32,6 +32,7 @@ public struct UpdateAvailableView: View {
             ScrollView {
                 Text(ReleaseNotesRenderer.render(controller.pendingUpdate?.releaseNotesMarkdown))
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
             }
             .frame(minHeight: 120, maxHeight: 240)
             .background(Color(nsColor: .textBackgroundColor))
@@ -53,3 +54,9 @@ public struct UpdateAvailableView: View {
         .frame(width: 420)
     }
 }
+
+#if DEBUG
+#Preview {
+    UpdateAvailableView(controller: PreviewSupport.controller(), appName: "Example App")
+}
+#endif
