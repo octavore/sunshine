@@ -14,6 +14,7 @@ public final class SunshineUpdater: ObservableObject {
     private let client: GitHubReleasesClient
     private let verifier: UpdateVerifier
     private let store: SkipAndRemindStore
+    private let preferencesStore: UpdatePreferencesStore
     private let bundleIdentifier: String
     private let installURL: URL
 
@@ -33,13 +34,69 @@ public final class SunshineUpdater: ObservableObject {
         self.bundleIdentifier = bundleID
         self.installURL = configuration.installLocation ?? Bundle.main.bundleURL
         self.store = SkipAndRemindStore(bundleIdentifier: bundleID)
+        self.preferencesStore = UpdatePreferencesStore(bundleIdentifier: bundleID)
+
+        if let savedAutoCheck = preferencesStore.automaticallyCheckForUpdates {
+            self.configuration.checkInterval = savedAutoCheck ? (configuration.checkInterval ?? 3600) : nil
+        }
+        if let savedLevel = preferencesStore.automationLevel {
+            self.configuration.automationLevel = savedLevel
+        }
+        if let savedPrereleases = preferencesStore.allowPrereleases {
+            self.configuration.allowPrereleases = savedPrereleases
+        }
 
         InstallSession.sweepStaleAsideBundles(near: installURL)
 
-        if configuration.checkInterval != nil {
+        if self.configuration.checkInterval != nil {
             startAutomaticChecking()
         }
     }
+
+    // MARK: - Live settings (for `SunshineUpdateSettingsView`)
+
+    /// Whether the background check loop is running. Setting this persists the preference
+    /// and starts/stops the loop immediately.
+    public var isAutomaticallyCheckingForUpdates: Bool {
+        get { configuration.checkInterval != nil }
+        set {
+            objectWillChange.send()
+            preferencesStore.automaticallyCheckForUpdates = newValue
+            if newValue {
+                configuration.checkInterval = configuration.checkInterval ?? 3600
+                startAutomaticChecking()
+            } else {
+                configuration.checkInterval = nil
+                schedulingTask?.cancel()
+                schedulingTask = nil
+            }
+        }
+    }
+
+    /// Whether a found update should download, verify, and install unattended. Persists
+    /// the preference immediately.
+    public var automationLevel: UpdateAutomationLevel {
+        get { configuration.automationLevel }
+        set {
+            objectWillChange.send()
+            configuration.automationLevel = newValue
+            preferencesStore.automationLevel = newValue
+        }
+    }
+
+    /// Whether prerelease GitHub releases are eligible updates. Persists the preference
+    /// immediately.
+    public var allowPrereleases: Bool {
+        get { configuration.allowPrereleases }
+        set {
+            objectWillChange.send()
+            configuration.allowPrereleases = newValue
+            preferencesStore.allowPrereleases = newValue
+        }
+    }
+
+    /// When the most recent check (successful or not) ran, for display in settings UI.
+    public var lastCheckDate: Date? { store.lastCheckDate() }
 
     // MARK: - Headless / programmatic API
 

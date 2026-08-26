@@ -18,12 +18,12 @@ public struct UpdateAvailableView: View {
                 if let appIcon {
                     appIcon.resizable().frame(width: 48, height: 48)
                 }
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("A new version of \(appName) is available!")
                         .font(.headline)
                     if let update = controller.pendingUpdate {
                         Text("\(AppVersion.fromMainBundle().shortVersion) → \(update.version.shortVersion)")
-                            .font(.subheadline)
+                            .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
                     }
                 }

@@ -7,9 +7,15 @@ public final class SunshineUpdaterUIController: ObservableObject {
     public let updater: SunshineUpdater
 
     @Published public var isPresentingUpdateSheet: Bool = false
+    @Published public var isPresentingUpToDateAlert: Bool = false
     @Published public private(set) var pendingUpdate: Update?
     @Published public private(set) var progress: Double = 0
     @Published public private(set) var errorMessage: String?
+
+    /// Set by `.sunshineUpdater(_:style:)` to control whether a newly discovered update
+    /// auto-presents `isPresentingUpdateSheet`, or just becomes available for a passive
+    /// indicator (e.g. `UpdateIndicatorView`) to surface on its own.
+    public var updateUIStyle: SunshineUpdateUIStyle = .sheet
 
     private var cancellable: AnyCancellable?
     private var didStart = false
@@ -26,14 +32,18 @@ public final class SunshineUpdaterUIController: ObservableObject {
         case .updateAvailable(let update):
             pendingUpdate = update
             errorMessage = nil
-            isPresentingUpdateSheet = true
+            if updateUIStyle == .sheet {
+                isPresentingUpdateSheet = true
+            }
         case .downloading(_, let fraction):
             progress = fraction
         case .readyToInstall(let update):
             pendingUpdate = update
         case .error(let error):
             errorMessage = "\(error)"
-            isPresentingUpdateSheet = true
+            if updateUIStyle == .sheet {
+                isPresentingUpdateSheet = true
+            }
         case .upToDate:
             isPresentingUpdateSheet = false
         default:
@@ -52,7 +62,7 @@ public final class SunshineUpdaterUIController: ObservableObject {
         Task {
             let result = await updater.checkForUpdates()
             if case .noUpdateAvailable = result {
-                isPresentingUpdateSheet = true
+                isPresentingUpToDateAlert = true
             }
         }
     }
