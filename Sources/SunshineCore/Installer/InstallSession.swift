@@ -10,7 +10,7 @@ public struct VerifiedUpdate: Sendable {
 /// Runs the quit/swap/relaunch/rollback sequence while the current app is still alive.
 /// The new bundle is moved into place and launched before the old process exits, so a
 /// failure at any point can roll back to the still-running old bundle.
-struct InstallSession {
+struct InstallSession: Sendable {
     let bundleIdentifier: String
     let verifier: UpdateVerifier
     /// Injectable so tests can simulate relaunch success/failure without actually

@@ -29,25 +29,39 @@ public struct UpdateAvailableView: View {
                 }
             }
 
-            ScrollView {
-                Text(ReleaseNotesRenderer.render(controller.pendingUpdate?.releaseNotesMarkdown))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-            }
-            .frame(minHeight: 120, maxHeight: 240)
-            .background(Color(nsColor: .textBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-
-            if controller.progress > 0 && controller.progress < 1 {
-                ProgressView(value: controller.progress)
+            if let releaseNotes = ReleaseNotesRenderer.render(controller.pendingUpdate?.releaseNotesMarkdown) {
+                ScrollView {
+                    Text(releaseNotes)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                }
+                .frame(minHeight: 120, maxHeight: 240)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            HStack {
-                Button("Skip This Version") { controller.skipTapped() }
-                Spacer()
-                Button("Remind Me Later") { controller.remindLaterTapped() }
-                Button("Install & Relaunch") { controller.installTapped() }
-                    .keyboardShortcut(.defaultAction)
+            if controller.isInstalling {
+                VStack(alignment: .leading, spacing: 6) {
+                    if controller.progress > 0 && controller.progress < 1 {
+                        ProgressView(value: controller.progress) {
+                            Text(controller.statusText)
+                        }
+                    } else {
+                        ProgressView {
+                            Text(controller.statusText)
+                        }
+                        .progressViewStyle(.linear)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            } else {
+                HStack {
+                    Button("Skip This Version") { controller.skipTapped() }
+                    Spacer()
+                    Button("Remind Me Later") { controller.remindLaterTapped() }
+                    Button("Install & Relaunch") { controller.installTapped() }
+                        .keyboardShortcut(.defaultAction)
+                }
             }
         }
         .padding(20)

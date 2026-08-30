@@ -18,6 +18,7 @@ private struct SunshineUpdaterModifier: ViewModifier {
                     UpdateErrorView(message: message, releaseURL: controller.pendingUpdate?.htmlURL)
                 } else {
                     UpdateAvailableView(controller: controller, appName: appName, appIcon: appIcon)
+                        .interactiveDismissDisabled(controller.isInstalling)
                 }
             }
             .overlay(alignment: .bottomTrailing) {
@@ -26,11 +27,33 @@ private struct SunshineUpdaterModifier: ViewModifier {
                         .padding(16)
                 }
             }
-            .alert("You're up to date!", isPresented: $controller.isPresentingUpToDateAlert) {
+            .alert(
+                controller.skippedUpdate == nil ? "You're up to date!" : "Update Available",
+                isPresented: $controller.isPresentingUpToDateAlert
+            ) {
+                if controller.skippedUpdate != nil {
+                    Button("View Update") { controller.viewSkippedUpdateTapped() }
+                }
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("\(appName) \(AppVersion.fromMainBundle().shortVersion) is the latest version.")
+                if let skippedUpdate = controller.skippedUpdate {
+                    Text("The latest version of \(appName) is \(skippedUpdate.version.shortVersion). You have \(AppVersion.fromMainBundle().shortVersion).")
+                } else {
+                    Text(upToDateMessage(appName: appName, releaseURL: controller.upToDateReleaseURL))
+                }
             }
+    }
+
+    /// "\(appName) \(version) is the latest version.", with the name and version linking out
+    /// to the GitHub release page when one is known. Building this as an `AttributedString`
+    /// (rather than interpolating into a Markdown string) avoids `appName` breaking parsing
+    /// if it contains Markdown-special characters.
+    private func upToDateMessage(appName: String, releaseURL: URL?) -> AttributedString {
+        var linkRun = AttributedString("\(appName) \(AppVersion.fromMainBundle().shortVersion)")
+        if let releaseURL {
+            linkRun.link = releaseURL
+        }
+        return linkRun + AttributedString(" is the latest version.")
     }
 }
 

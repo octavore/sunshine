@@ -24,6 +24,10 @@ struct SkipAndRemindStore {
         defaults.set(update.id, forKey: skippedVersionKey)
     }
 
+    func clearSkip() {
+        defaults.removeObject(forKey: skippedVersionKey)
+    }
+
     func remindLater(_ update: Update, for interval: TimeInterval) {
         defaults.set(Date().addingTimeInterval(interval), forKey: remindAfterKey)
     }
@@ -31,6 +35,10 @@ struct SkipAndRemindStore {
     func isRemindingLater() -> Bool {
         guard let date = defaults.object(forKey: remindAfterKey) as? Date else { return false }
         return date > Date()
+    }
+
+    func clearRemindLater() {
+        defaults.removeObject(forKey: remindAfterKey)
     }
 
     func lastCheckDate() -> Date? {

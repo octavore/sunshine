@@ -49,6 +49,11 @@ public final class SunshineUpdater: ObservableObject {
             self.configuration.allowPrereleases = savedPrereleases
         }
 
+        // Confirm a pending relaunch handshake automatically, so the host app does not
+        // have to wire `confirmSuccessfulRelaunchIfNeeded()` itself. This is a no-op
+        // unless the process was started by RelaunchCoordinator.
+        RelaunchCoordinator.confirmSuccessfulRelaunchIfNeeded(bundleIdentifier: bundleID)
+
         InstallSession.sweepStaleAsideBundles(near: installURL)
 
         if self.configuration.checkInterval != nil {
@@ -138,7 +143,7 @@ public final class SunshineUpdater: ObservableObject {
 
             guard runningVersion.isUpdate(candidateVersion) else {
                 state = .upToDate
-                let result = UpdateCheckResult.noUpdateAvailable(latestKnown: nil)
+                let result = UpdateCheckResult.noUpdateAvailable(latestKnown: nil, releaseURL: latest.htmlURL)
                 emit(.checkFinished(result))
                 return result
             }
@@ -156,7 +161,7 @@ public final class SunshineUpdater: ObservableObject {
 
             if store.skippedVersion() == update.id || store.isRemindingLater() {
                 state = .upToDate
-                let result = UpdateCheckResult.noUpdateAvailable(latestKnown: update)
+                let result = UpdateCheckResult.noUpdateAvailable(latestKnown: update, releaseURL: update.htmlURL)
                 emit(.checkFinished(result))
                 return result
             }
@@ -207,7 +212,18 @@ public final class SunshineUpdater: ObservableObject {
         let archiveURL = tempDirectory.appendingPathComponent(update.asset.name)
 
         do {
-            let (downloadedURL, _) = try await URLSession.shared.download(from: update.asset.browserDownloadURL)
+            let progressDelegate = DownloadProgressForwarder { [weak self] fraction in
+                Task { @MainActor in
+                    guard let self else { return }
+                    self.state = .downloading(update, fractionComplete: fraction)
+                    self.emit(.downloadProgress(
+                        fractionComplete: fraction,
+                        bytesWritten: Int64(Double(update.asset.size) * fraction),
+                        bytesTotal: Int64(update.asset.size)))
+                }
+            }
+            let request = URLRequest(url: update.asset.browserDownloadURL)
+            let (downloadedURL, _) = try await URLSession.shared.download(for: request, delegate: progressDelegate)
             if FileManager.default.fileExists(atPath: archiveURL.path) {
                 try FileManager.default.removeItem(at: archiveURL)
             }
@@ -226,10 +242,16 @@ public final class SunshineUpdater: ObservableObject {
     public func verify(_ downloaded: DownloadedUpdate) async throws -> VerifiedUpdate {
         state = .verifying(downloaded.update)
         emit(.verificationStarted)
+        let verifier = self.verifier
         do {
-            let extractedDirectory = downloaded.tempDirectory.appendingPathComponent("extracted", isDirectory: true)
-            let appURL = try ArchiveExtractor.extractApp(fromArchiveAt: downloaded.archiveURL, into: extractedDirectory)
-            let report = try verifier.verify(appAt: appURL)
+            // Extraction (`ditto`/`hdiutil`) and verification (`codesign`/`spctl`) shell
+            // out and block for seconds — run them off the main actor so the UI stays live.
+            let (appURL, report) = try await Task.detached(priority: .userInitiated) {
+                let extractedDirectory = downloaded.tempDirectory.appendingPathComponent("extracted", isDirectory: true)
+                let appURL = try ArchiveExtractor.extractApp(fromArchiveAt: downloaded.archiveURL, into: extractedDirectory)
+                let report = try verifier.verify(appAt: appURL)
+                return (appURL, report)
+            }.value
             let verified = VerifiedUpdate(update: downloaded.update, extractedAppURL: appURL, tempDirectory: downloaded.tempDirectory, verificationReport: report)
             currentVerified = verified
             state = .readyToInstall(downloaded.update)
@@ -251,9 +273,14 @@ public final class SunshineUpdater: ObservableObject {
         state = .installing
         emit(.installStarted)
         let session = InstallSession(bundleIdentifier: bundleIdentifier, verifier: verifier)
+        let installURL = self.installURL
         do {
             emit(.willRelaunch)
-            try await session.install(verified, installURL: installURL)
+            // Re-verification and the bundle swap also block on subprocesses; keep them
+            // off the main actor so the sheet can show its "installing" state.
+            try await Task.detached(priority: .userInitiated) {
+                try await session.install(verified, installURL: installURL)
+            }.value
         } catch let error as SunshineError {
             state = .error(error)
             emit(.installFailed(error, rolledBack: true))
@@ -283,6 +310,14 @@ public final class SunshineUpdater: ObservableObject {
 
     public func skip(_ update: Update) {
         store.skip(update)
+    }
+
+    /// Clears a previously skipped version and any active "remind me later" timer, so the
+    /// update becomes eligible again on the next check (e.g. when the user chooses to view
+    /// an update they'd earlier skipped or deferred).
+    public func clearSkippedVersion() {
+        store.clearSkip()
+        store.clearRemindLater()
     }
 
     public func remindLater(_ update: Update, for interval: TimeInterval = 24 * 60 * 60) {
