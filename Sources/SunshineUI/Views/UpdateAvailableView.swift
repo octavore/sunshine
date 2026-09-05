@@ -13,13 +13,36 @@ public struct UpdateAvailableView: View {
     }
 
     public var body: some View {
+        UpdateReviewContent(controller: controller, appName: appName, appIcon: appIcon)
+            .padding(20)
+            .frame(width: 420)
+    }
+}
+
+/// The update-review UI — version delta, release notes, and the install / skip /
+/// remind actions (or install progress) — without any outer padding or fixed
+/// width, so it fits both `UpdateAvailableView`'s sheet and an inline spot in a
+/// settings pane.
+struct UpdateReviewContent: View {
+    @ObservedObject var controller: SunshineUpdaterUIController
+    let appName: String
+    let appIcon: Image?
+    /// Whether to draw the app icon and name. Off when the host already shows
+    /// app identity above this view (the settings pane), so it isn't repeated.
+    var showsAppIdentity: Bool = true
+    /// Whether to offer "Skip This Version" and "Remind Me Later" alongside
+    /// "Install & Relaunch". Off in the settings pane, where the user navigated
+    /// here to act and a skip is undone by the next Check Now anyway.
+    var showsDismissActions: Bool = true
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                if let appIcon {
+                if showsAppIdentity, let appIcon {
                     appIcon.resizable().frame(width: 48, height: 48)
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("A new version of \(appName) is available!")
+                    Text(showsAppIdentity ? "A new version of \(appName) is available!" : "A new version is available")
                         .font(.headline)
                     if let update = controller.pendingUpdate {
                         Text("\(AppVersion.fromMainBundle().shortVersion) → \(update.version.shortVersion)")
@@ -56,16 +79,18 @@ public struct UpdateAvailableView: View {
                 .frame(maxWidth: .infinity)
             } else {
                 HStack {
-                    Button("Skip This Version") { controller.skipTapped() }
-                    Spacer()
-                    Button("Remind Me Later") { controller.remindLaterTapped() }
+                    if showsDismissActions {
+                        Button("Skip This Version") { controller.skipTapped() }
+                        Spacer()
+                        Button("Remind Me Later") { controller.remindLaterTapped() }
+                    } else {
+                        Spacer()
+                    }
                     Button("Install & Relaunch") { controller.installTapped() }
                         .keyboardShortcut(.defaultAction)
                 }
             }
         }
-        .padding(20)
-        .frame(width: 420)
     }
 }
 

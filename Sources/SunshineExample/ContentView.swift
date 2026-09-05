@@ -58,7 +58,7 @@ private struct UpdaterHost: View {
     private var screenView: some View {
         switch screen {
         case .settings:
-            SunshineUpdateSettingsView(updater: updater, appName: "Example App")
+            SunshineUpdateSettingsView(controller: controller, appName: "Example App")
         case .updateAvailable:
             if controller.pendingUpdate != nil {
                 UpdateAvailableView(controller: controller, appName: "Example App")

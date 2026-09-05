@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 import SunshineCore
 
 @MainActor
@@ -27,11 +28,20 @@ public final class SunshineUpdaterUIController: ObservableObject {
     /// indicator (e.g. `UpdateIndicatorView`) to surface on its own.
     public var updateUIStyle: SunshineUpdateUIStyle = .sheet
 
+    /// While true, a newly discovered update or error populates `pendingUpdate` /
+    /// `errorMessage` but does not raise `isPresentingUpdateSheet`. A host showing
+    /// the review itself (e.g. `SunshineUpdateSettingsView`) sets this while it is
+    /// on screen so the same update does not also pop as a sheet on another window.
+    @Published public var suppressesUpdateSheet = false
+
     private var cancellable: AnyCancellable?
     private var didStart = false
 
     public init(updater: SunshineUpdater) {
         self.updater = updater
+        // Terminate through AppKit rather than `exit(0)` so the app delegate, autosave,
+        // and any unsaved-changes prompt run before the bundle is swapped.
+        updater.terminate = { NSApp.terminate(nil) }
         cancellable = updater.$state.sink { [weak self] state in
             self?.handle(state)
         }
@@ -42,7 +52,7 @@ public final class SunshineUpdaterUIController: ObservableObject {
         case .updateAvailable(let update):
             pendingUpdate = update
             errorMessage = nil
-            if updateUIStyle == .sheet {
+            if updateUIStyle == .sheet && !suppressesUpdateSheet {
                 isPresentingUpdateSheet = true
             }
         case .downloading(_, let fraction):
@@ -63,7 +73,7 @@ public final class SunshineUpdaterUIController: ObservableObject {
         case .error(let error):
             isInstalling = false
             errorMessage = "\(error)"
-            if updateUIStyle == .sheet {
+            if updateUIStyle == .sheet && !suppressesUpdateSheet {
                 isPresentingUpdateSheet = true
             }
         case .upToDate:
@@ -92,6 +102,34 @@ public final class SunshineUpdaterUIController: ObservableObject {
                 isPresentingUpToDateAlert = true
             }
         }
+    }
+
+    /// Runs a user-initiated check and leaves the outcome in the controller's
+    /// published state, presenting nothing itself. A previously skipped or deferred
+    /// version is resurfaced as `pendingUpdate` (the engine otherwise reports it as
+    /// "up to date"), so a host that renders the review inline — the settings pane —
+    /// can show it. Returns the raw result for any further host handling.
+    ///
+    /// Use this when the review is shown in your own UI. Use
+    /// ``checkForUpdatesButtonTapped()`` when you want the ready-made sheet/alert.
+    @discardableResult
+    public func refreshUpdateStatus() async -> UpdateCheckResult {
+        let result = await updater.checkForUpdates()
+        switch result {
+        case .noUpdateAvailable(let latestKnown?, _):
+            // The engine treats a skipped/deferred version as up to date. A manual
+            // check is an explicit "show me updates", so drop those filters and
+            // surface it as pending.
+            updater.clearSkippedVersion()
+            pendingUpdate = latestKnown
+            errorMessage = nil
+        case .noUpdateAvailable(nil, _):
+            pendingUpdate = nil
+            errorMessage = nil
+        case .updateAvailable, .failed:
+            break  // The state sink populates pendingUpdate / errorMessage.
+        }
+        return result
     }
 
     /// Reinstates a version the user previously skipped (or is reminding-later on) and
