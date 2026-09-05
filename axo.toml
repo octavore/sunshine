@@ -2,5 +2,11 @@ project_name = "sunshine"
 
 [tasks]
 build = "swift build"
+example = "swift run SunshineExample"
 test = "swift test"
 clean = "swift package clean"
+"readme:lint" = "rumdl check ."
+"readme:fmt" = "rumdl fmt ."
+
+[global_packages]
+"rvben/rumdl" = "^0.2.52"
