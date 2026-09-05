@@ -1,16 +1,31 @@
 import Foundation
-import AppKit
 
-/// Launches the newly-installed bundle and waits for it to confirm it started
-/// successfully, via a sentinel file the new process writes early in its own startup.
-/// `NSWorkspace` (AppKit) is used here rather than a separate relaunch-helper process —
-/// simpler for v1, at the cost of a brief window where old and new processes coexist.
+/// Owns the paths and the handshake shared by the host process and the relaunch script.
+/// The swap and relaunch themselves happen in `RelaunchScript`, spawned detached so the
+/// host can terminate normally first.
 enum RelaunchCoordinator {
     static let relaunchArgumentPrefix = "--sunshine-relaunched-from="
 
     static func sentinelURL(forBundleIdentifier bundleIdentifier: String, releaseTag: String) -> URL {
         SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
             .appendingPathComponent("launched-ok-\(releaseTag)")
+    }
+
+    static func scriptURL(forBundleIdentifier bundleIdentifier: String) -> URL {
+        SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
+            .appendingPathComponent("relaunch.sh")
+    }
+
+    /// Written by the host if its termination is cancelled after the script was spawned.
+    /// The script polls for this and exits without touching anything.
+    static func abortURL(forBundleIdentifier bundleIdentifier: String) -> URL {
+        SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
+            .appendingPathComponent("install-aborted")
+    }
+
+    static func logURL(forBundleIdentifier bundleIdentifier: String) -> URL {
+        SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
+            .appendingPathComponent("relaunch.log")
     }
 
     /// Call this once, as early as possible, when a host app starts up (both UI and
@@ -26,37 +41,25 @@ enum RelaunchCoordinator {
         FileManager.default.createFile(atPath: sentinel.path, contents: Data())
     }
 
-    /// Launches `installURL`, then polls for the sentinel file for up to `timeout`
-    /// seconds. Returns `true` on confirmed success.
-    static func relaunchAndAwaitConfirmation(
-        installURL: URL,
-        bundleIdentifier: String,
-        releaseTag: String,
-        timeout: TimeInterval = 10
-    ) async -> Bool {
-        let sentinel = sentinelURL(forBundleIdentifier: bundleIdentifier, releaseTag: releaseTag)
-        try? FileManager.default.removeItem(at: sentinel)
+    /// Signals a spawned-but-still-waiting script to stand down, for a host whose
+    /// termination was cancelled after the script was already running.
+    static func abortPendingInstall(bundleIdentifier: String) {
+        let url = abortURL(forBundleIdentifier: bundleIdentifier)
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: url.path, contents: Data())
+    }
 
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.arguments = ["\(relaunchArgumentPrefix)\(releaseTag)"]
-        configuration.createsNewApplicationInstance = true
+    /// Writes the script and launches it under `/bin/sh`, fully detached: no inherited
+    /// stdio and no wait, so it outlives this process. Returns as soon as it is running.
+    static func spawn(_ plan: RelaunchPlan) throws {
+        try RelaunchScript.write(to: plan.scriptURL)
 
-        do {
-            _ = try await NSWorkspace.shared.openApplication(at: installURL, configuration: configuration)
-        } catch {
-            return false
-        }
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if FileManager.default.fileExists(atPath: sentinel.path) {
-                return true
-            }
-            try? await Task.sleep(nanoseconds: 250_000_000)
-        }
-
-        // Fallback: a running process with the target bundle identifier is a weaker,
-        // but still meaningful, success signal if the host app never wires the sentinel.
-        return NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleIdentifier }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = plan.arguments
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
     }
 }

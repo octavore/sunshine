@@ -10,6 +10,16 @@ public final class SunshineUpdater: ObservableObject {
 
     public weak var delegate: (any SunshineUpdaterDelegate)?
 
+    /// How the host process ends itself once the relaunch script is waiting. The default
+    /// suits headless callers; `SunshineUI` replaces it with `NSApp.terminate(nil)` so the
+    /// app delegate, autosave, and unsaved-changes prompts all run first.
+    public var terminate: @MainActor () -> Void = { exit(0) }
+
+    /// How long to wait after `terminate()` before assuming termination was refused (an
+    /// app delegate returning `.terminateCancel`, an unsaved-changes sheet the user
+    /// dismisses) and standing the script down.
+    var terminationGracePeriod: TimeInterval = 20
+
     private var configuration: SunshineConfiguration
     private let client: any ReleasesProviding
     private let verifier: UpdateVerifier
@@ -54,6 +64,9 @@ public final class SunshineUpdater: ObservableObject {
         // unless the process was started by RelaunchCoordinator.
         RelaunchCoordinator.confirmSuccessfulRelaunchIfNeeded(bundleIdentifier: bundleID)
 
+        // Recovery must run before the sweep, which would otherwise be free to delete the
+        // very aside bundle recovery needs to move back.
+        InstallSession.recoverInterruptedInstall(bundleIdentifier: bundleID)
         InstallSession.sweepStaleAsideBundles(near: installURL)
 
         if self.configuration.checkInterval != nil {
@@ -105,6 +118,15 @@ public final class SunshineUpdater: ObservableObject {
 
     /// When the most recent check (successful or not) ran, for display in settings UI.
     public var lastCheckDate: Date? { store.lastCheckDate() }
+
+    /// The release tag the user chose to skip via ``skip(_:)``, or `nil` if none.
+    /// A check treats this version as "up to date"; ``clearSkippedVersion()`` undoes it.
+    public var skippedVersion: String? { store.skippedVersion() }
+
+    /// Whether an active "remind me later" deferral is currently suppressing an
+    /// otherwise-available update. Cleared by ``clearSkippedVersion()`` or when the
+    /// deferral interval elapses.
+    public var isRemindingLater: Bool { store.isRemindingLater() }
 
     // MARK: - Headless / programmatic API
 
@@ -269,15 +291,21 @@ public final class SunshineUpdater: ObservableObject {
         }
     }
 
-    public func install(_ verified: VerifiedUpdate) async throws -> Never {
+    /// Stages the update and hands the swap to a detached script, then terminates this
+    /// process so the script can proceed. On success this does not return meaningfully;
+    /// the process is expected to be gone. A throw means nothing was moved.
+    ///
+    /// Because the swap, relaunch, and any rollback happen after this process exits, their
+    /// outcome cannot be reported back through `events`; only failures raised before the
+    /// script is spawned produce `.installFailed`.
+    public func install(_ verified: VerifiedUpdate) async throws {
         state = .installing
         emit(.installStarted)
         let session = InstallSession(bundleIdentifier: bundleIdentifier, verifier: verifier)
         let installURL = self.installURL
         do {
-            emit(.willRelaunch)
-            // Re-verification and the bundle swap also block on subprocesses; keep them
-            // off the main actor so the sheet can show its "installing" state.
+            // Re-verification shells out to `codesign`/`spctl` and blocks for seconds;
+            // keep it off the main actor so the sheet can show its "installing" state.
             try await Task.detached(priority: .userInitiated) {
                 try await session.install(verified, installURL: installURL)
             }.value
@@ -286,13 +314,41 @@ public final class SunshineUpdater: ObservableObject {
             emit(.installFailed(error, rolledBack: true))
             throw error
         } catch {
-            let wrapped = SunshineError.rollbackFailed(underlying: error)
+            let wrapped = SunshineError.relaunchFailed(underlying: error)
             state = .error(wrapped)
             emit(.installFailed(wrapped, rolledBack: true))
             throw wrapped
         }
+
+        emit(.willRelaunch)
         delegate?.updaterDidFinishInstalling(self)
-        exit(0)
+
+        terminate()
+
+        // Reached only if termination was refused. The script is still waiting on this
+        // process, so stand it down rather than let it swap the bundle out from under a
+        // live app whenever this process eventually does exit.
+        Task { [terminationGracePeriod] in
+            try? await Task.sleep(nanoseconds: UInt64(terminationGracePeriod * 1_000_000_000))
+            self.abortPendingInstall()
+        }
+    }
+
+    /// Cancels an install whose script has already been spawned but has not yet acted,
+    /// leaving the current bundle in place. Call this if the app declines to terminate
+    /// (e.g. `applicationShouldTerminate` returns `.terminateCancel`) after `install()`.
+    /// `install()` also does this automatically once its grace period elapses.
+    ///
+    /// This only takes effect while this process is alive: the script ignores the signal
+    /// once the host exits, so a cancelled-then-completed termination still updates. The
+    /// script owns the breadcrumb file for the same reason, and it is deliberately left
+    /// in place here.
+    public func abortPendingInstall() {
+        RelaunchCoordinator.abortPendingInstall(bundleIdentifier: bundleIdentifier)
+        if case .installing = state {
+            state = .error(.cancelled)
+            emit(.installFailed(.cancelled, rolledBack: true))
+        }
     }
 
     /// End-to-end convenience path. `silently` skips the `.readyToInstall` pause for a

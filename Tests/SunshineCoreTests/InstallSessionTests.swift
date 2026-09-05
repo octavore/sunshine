@@ -33,33 +33,14 @@ private struct PassingChecker: CodeSigningChecking {
         try? String(contentsOf: appURL.appendingPathComponent("marker.txt"), encoding: .utf8)
     }
 
-    @Test func successfulSwapCleansUpOldBundleAndCommitsNew() async throws {
-        let root = try makeTempRoot()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let installDir = root.appendingPathComponent("Applications", isDirectory: true)
-        try FileManager.default.createDirectory(at: installDir, withIntermediateDirectories: true)
-        let installURL = installDir.appendingPathComponent("MyApp.app")
-        try makeFakeApp(at: installURL, marker: "OLD")
-
-        let extractedURL = root.appendingPathComponent("staging/MyApp.app")
-        try makeFakeApp(at: extractedURL, marker: "NEW")
-
-        let verifier = UpdateVerifier(requireNotarization: true, checker: PassingChecker())
-        let verified = VerifiedUpdate(
-            update: makeUpdate(), extractedAppURL: extractedURL, tempDirectory: root,
+    private func makeVerified(extractedAppURL: URL, tempDirectory: URL) -> VerifiedUpdate {
+        VerifiedUpdate(
+            update: makeUpdate(), extractedAppURL: extractedAppURL, tempDirectory: tempDirectory,
             verificationReport: VerificationReport(signatureValid: true, teamIdentifier: "TEAM123", runningAppTeamIdentifier: "TEAM123", teamIdentifierMatches: true, notarizationAccepted: true, details: "")
         )
-
-        let session = InstallSession(bundleIdentifier: "com.test.app", verifier: verifier, relaunch: { _, _, _ in true })
-        try await session.install(verified, installURL: installURL)
-
-        #expect(readMarker(at: installURL) == "NEW")
-        let siblings = try FileManager.default.contentsOfDirectory(at: installDir, includingPropertiesForKeys: nil)
-        #expect(siblings.map(\.lastPathComponent) == ["MyApp.app"]) // aside'd old bundle was cleaned up
     }
 
-    @Test func relaunchFailureRollsBackToOldBundle() async throws {
+    @Test func installStagesTheSwapWithoutTouchingTheInstalledBundle() async throws {
         let root = try makeTempRoot()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -72,25 +53,28 @@ private struct PassingChecker: CodeSigningChecking {
         try makeFakeApp(at: extractedURL, marker: "NEW")
 
         let verifier = UpdateVerifier(requireNotarization: true, checker: PassingChecker())
-        let verified = VerifiedUpdate(
-            update: makeUpdate(), extractedAppURL: extractedURL, tempDirectory: root,
-            verificationReport: VerificationReport(signatureValid: true, teamIdentifier: "TEAM123", runningAppTeamIdentifier: "TEAM123", teamIdentifierMatches: true, notarizationAccepted: true, details: "")
-        )
+        let captured = Captured()
+        var session = InstallSession(bundleIdentifier: "com.test.app", verifier: verifier)
+        session.spawn = { captured.plan = $0 }
+        defer { PendingInstallMarker.remove(at: PendingInstallMarker.markerURL(forBundleIdentifier: "com.test.app")) }
 
-        let session = InstallSession(bundleIdentifier: "com.test.app", verifier: verifier, relaunch: { _, _, _ in false })
+        try await session.install(makeVerified(extractedAppURL: extractedURL, tempDirectory: root), installURL: installURL)
 
-        await #expect(throws: SunshineError.self) {
-            try await session.install(verified, installURL: installURL)
-        }
-
-        // Old app must still be intact at the original path, and the broken new
-        // bundle must not be left in place.
+        // Nothing moves while the host is alive, which is the whole point of the script.
         #expect(readMarker(at: installURL) == "OLD")
-        let siblings = try FileManager.default.contentsOfDirectory(at: installDir, includingPropertiesForKeys: nil)
-        #expect(siblings.map(\.lastPathComponent) == ["MyApp.app"])
+        #expect(readMarker(at: extractedURL) == "NEW")
+
+        let plan = try #require(captured.plan)
+        #expect(plan.installURL == installURL)
+        #expect(plan.stagedURL == extractedURL)
+        #expect(plan.releaseTag == "v1.1.0")
+        #expect(plan.hostProcessIdentifier == ProcessInfo.processInfo.processIdentifier)
+        #expect(plan.asideURL.lastPathComponent.hasPrefix(".MyApp (old, "))
+        #expect(plan.arguments.count == 10)
+        #expect(FileManager.default.fileExists(atPath: plan.markerURL.path))
     }
 
-    @Test func nonWritableInstallLocationIsRejectedWithoutTouchingFiles() async throws {
+    @Test func nonWritableInstallLocationIsRejectedWithoutSpawning() async throws {
         let root = try makeTempRoot()
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent("Applications").path)
@@ -110,18 +94,64 @@ private struct PassingChecker: CodeSigningChecking {
         try makeFakeApp(at: extractedURL, marker: "NEW")
 
         let verifier = UpdateVerifier(requireNotarization: true, checker: PassingChecker())
-        let verified = VerifiedUpdate(
-            update: makeUpdate(), extractedAppURL: extractedURL, tempDirectory: root,
-            verificationReport: VerificationReport(signatureValid: true, teamIdentifier: "TEAM123", runningAppTeamIdentifier: "TEAM123", teamIdentifierMatches: true, notarizationAccepted: true, details: "")
-        )
-
-        let session = InstallSession(bundleIdentifier: "com.test.app", verifier: verifier, relaunch: { _, _, _ in true })
+        let captured = Captured()
+        var session = InstallSession(bundleIdentifier: "com.test.app", verifier: verifier)
+        session.spawn = { captured.plan = $0 }
 
         await #expect(throws: SunshineError.self) {
-            try await session.install(verified, installURL: installURL)
+            try await session.install(self.makeVerified(extractedAppURL: extractedURL, tempDirectory: root), installURL: installURL)
         }
 
+        #expect(captured.plan == nil)
         #expect(readMarker(at: installURL) == "OLD") // untouched
+    }
+
+    @Test func recoveryRestoresTheAsideBundleWhenTheScriptDiedMidSwap() throws {
+        let root = try makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let installURL = root.appendingPathComponent("MyApp.app")
+        let asideURL = root.appendingPathComponent(".MyApp (old, 1234).app")
+        try makeFakeApp(at: asideURL, marker: "OLD")
+
+        let markerURL = PendingInstallMarker.markerURL(forBundleIdentifier: "com.test.recovery")
+        defer { PendingInstallMarker.remove(at: markerURL) }
+        try FileManager.default.createDirectory(at: markerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try PendingInstallMarker(
+            installURL: installURL, oldAsidePath: asideURL,
+            newBundlePath: root.appendingPathComponent("staged/MyApp.app"),
+            releaseTag: "v1.1.0", startedAt: Date()
+        ).write(to: markerURL)
+
+        InstallSession.recoverInterruptedInstall(bundleIdentifier: "com.test.recovery")
+
+        #expect(readMarker(at: installURL) == "OLD")
+        #expect(!FileManager.default.fileExists(atPath: asideURL.path))
+        #expect(!FileManager.default.fileExists(atPath: markerURL.path))
+    }
+
+    @Test func recoveryDropsTheAsideBundleWhenTheSwapAlreadyCompleted() throws {
+        let root = try makeTempRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let installURL = root.appendingPathComponent("MyApp.app")
+        let asideURL = root.appendingPathComponent(".MyApp (old, 1234).app")
+        try makeFakeApp(at: installURL, marker: "NEW")
+        try makeFakeApp(at: asideURL, marker: "OLD")
+
+        let markerURL = PendingInstallMarker.markerURL(forBundleIdentifier: "com.test.recovery2")
+        defer { PendingInstallMarker.remove(at: markerURL) }
+        try FileManager.default.createDirectory(at: markerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try PendingInstallMarker(
+            installURL: installURL, oldAsidePath: asideURL,
+            newBundlePath: root.appendingPathComponent("staged/MyApp.app"),
+            releaseTag: "v1.1.0", startedAt: Date()
+        ).write(to: markerURL)
+
+        InstallSession.recoverInterruptedInstall(bundleIdentifier: "com.test.recovery2")
+
+        #expect(readMarker(at: installURL) == "NEW")
+        #expect(!FileManager.default.fileExists(atPath: asideURL.path))
     }
 
     @Test func staleAsideBundlesAreSweptButRecentOnesAreKept() throws {
@@ -146,4 +176,9 @@ private struct PassingChecker: CodeSigningChecking {
         #expect(!FileManager.default.fileExists(atPath: staleAside.path))
         #expect(FileManager.default.fileExists(atPath: recentAside.path))
     }
+}
+
+/// Reference box so the `@Sendable` spawn closure can hand a value back to the test.
+private final class Captured: @unchecked Sendable {
+    var plan: RelaunchPlan?
 }

@@ -17,6 +17,7 @@ struct PendingInstallMarker: Codable {
     func write(to url: URL) throws {
         let encoder = PropertyListEncoder()
         let data = try encoder.encode(self)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: url, options: .atomic)
     }
 

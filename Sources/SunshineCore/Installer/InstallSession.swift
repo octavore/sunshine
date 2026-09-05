@@ -7,25 +7,18 @@ public struct VerifiedUpdate: Sendable {
     public let verificationReport: VerificationReport
 }
 
-/// Runs the quit/swap/relaunch/rollback sequence while the current app is still alive.
-/// The new bundle is moved into place and launched before the old process exits, so a
-/// failure at any point can roll back to the still-running old bundle.
+/// Prepares the swap, then hands it to a detached shell script that waits for this
+/// process to exit before touching anything. Nothing is moved while the host is alive, so
+/// a host that fails to terminate leaves the installed bundle exactly as it was.
 struct InstallSession: Sendable {
     let bundleIdentifier: String
     let verifier: UpdateVerifier
-    /// Injectable so tests can simulate relaunch success/failure without actually
-    /// launching a process via NSWorkspace.
-    var relaunch: @Sendable (URL, String, String) async -> Bool = { installURL, bundleIdentifier, releaseTag in
-        await RelaunchCoordinator.relaunchAndAwaitConfirmation(
-            installURL: installURL,
-            bundleIdentifier: bundleIdentifier,
-            releaseTag: releaseTag
-        )
-    }
+    /// Injectable so tests can inspect what would be spawned without running a process.
+    var spawn: @Sendable (RelaunchPlan) throws -> Void = RelaunchCoordinator.spawn
 
-    /// Performs the swap and relaunch. On success this does not return meaningfully to
-    /// the caller (the old process is expected to terminate); on failure the old bundle
-    /// is restored and the error is thrown with the old app left fully intact.
+    /// Validates, stages, and spawns the relaunch script. Returns once the script is
+    /// running and waiting; the caller is then expected to terminate the process. A throw
+    /// means nothing was moved and the installed app is untouched.
     func install(_ verified: VerifiedUpdate, installURL: URL) async throws {
         guard InstallLocationChecker.isWritable(installURL) else {
             throw SunshineError.installLocationNotWritable(installURL)
@@ -35,49 +28,70 @@ struct InstallSession: Sendable {
         // "ready to install" and the user actually confirming.
         _ = try verifier.verify(appAt: verified.extractedAppURL)
 
-        let oldAsidePath = installURL.deletingLastPathComponent()
+        let asideURL = installURL.deletingLastPathComponent()
             .appendingPathComponent(".\(installURL.deletingPathExtension().lastPathComponent) (old, \(Int(Date().timeIntervalSince1970))).app")
 
+        // Done here rather than in the script: the staged bundle is already verified and
+        // still ours, and it keeps `xattr` out of the shell.
+        QuarantineRemover.removeQuarantine(at: verified.extractedAppURL)
+
+        let markerURL = PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier)
         let marker = PendingInstallMarker(
             installURL: installURL,
-            oldAsidePath: oldAsidePath,
+            oldAsidePath: asideURL,
             newBundlePath: verified.extractedAppURL,
             releaseTag: verified.update.id,
             startedAt: Date()
         )
-        try? marker.write(to: PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier))
+        try? marker.write(to: markerURL)
+
+        let sentinelURL = RelaunchCoordinator.sentinelURL(forBundleIdentifier: bundleIdentifier, releaseTag: verified.update.id)
+        let abortURL = RelaunchCoordinator.abortURL(forBundleIdentifier: bundleIdentifier)
+        // A same-tag reinstall could otherwise be confirmed by the previous install's
+        // sentinel, and a previous cancelled install by its abort file.
+        try? FileManager.default.removeItem(at: sentinelURL)
+        try? FileManager.default.removeItem(at: abortURL)
+
+        let plan = RelaunchPlan(
+            scriptURL: RelaunchCoordinator.scriptURL(forBundleIdentifier: bundleIdentifier),
+            hostProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+            installURL: installURL,
+            asideURL: asideURL,
+            stagedURL: verified.extractedAppURL,
+            sentinelURL: sentinelURL,
+            markerURL: markerURL,
+            abortURL: abortURL,
+            logURL: RelaunchCoordinator.logURL(forBundleIdentifier: bundleIdentifier),
+            releaseTag: verified.update.id
+        )
+
+        do {
+            try spawn(plan)
+        } catch {
+            PendingInstallMarker.remove(at: markerURL)
+            throw SunshineError.relaunchFailed(underlying: error)
+        }
+    }
+
+    /// Finishes a swap whose script died partway through: if the installed bundle is gone
+    /// but an aside copy from the recorded install is still present, move it back. Runs at
+    /// `SunshineUpdater` init, before the stale-aside sweep.
+    static func recoverInterruptedInstall(bundleIdentifier: String) {
+        let markerURL = PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier)
+        guard let marker = PendingInstallMarker.read(from: markerURL) else { return }
 
         let fileManager = FileManager.default
+        let installed = fileManager.fileExists(atPath: marker.installURL.path)
+        let aside = fileManager.fileExists(atPath: marker.oldAsidePath.path)
 
-        do {
-            try fileManager.moveItem(at: installURL, to: oldAsidePath)
-        } catch {
-            throw SunshineError.installLocationNotWritable(installURL)
+        if !installed && aside {
+            try? fileManager.moveItem(at: marker.oldAsidePath, to: marker.installURL)
+        } else if installed && aside {
+            // The swap completed but cleanup did not; the aside copy is now dead weight.
+            try? fileManager.removeItem(at: marker.oldAsidePath)
         }
 
-        QuarantineRemover.removeQuarantine(at: verified.extractedAppURL)
-
-        do {
-            try fileManager.moveItem(at: verified.extractedAppURL, to: installURL)
-        } catch {
-            // Commit failed — restore the old bundle so the running app is unaffected.
-            try? fileManager.moveItem(at: oldAsidePath, to: installURL)
-            throw SunshineError.rollbackFailed(underlying: error)
-        }
-
-        let confirmed = await relaunch(installURL, bundleIdentifier, verified.update.id)
-
-        guard confirmed else {
-            // Roll back: remove the broken new bundle, restore the old one, do NOT
-            // terminate the current (still-running, still-good) process.
-            try? fileManager.removeItem(at: installURL)
-            try? fileManager.moveItem(at: oldAsidePath, to: installURL)
-            PendingInstallMarker.remove(at: PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier))
-            throw SunshineError.relaunchFailed(underlying: CocoaError(.fileWriteUnknown))
-        }
-
-        try? fileManager.removeItem(at: oldAsidePath)
-        PendingInstallMarker.remove(at: PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier))
+        PendingInstallMarker.remove(at: markerURL)
     }
 
     /// Best-effort cleanup of aside'd bundles left behind by an interrupted install, run
