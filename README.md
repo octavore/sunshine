@@ -1,10 +1,6 @@
 # Sunshine
 
-Auto-update library for macOS apps distributed via GitHub Releases, similar in
-purpose to Sparkle or the Tauri updater. It does not use a separate signing
-key. Instead it verifies updates using macOS code signing and notarization:
-an update is installed only if it is signed by the same Developer ID Team as
-the app currently running.
+Auto-update library for macOS apps distributed via GitHub Releases. Updates are verified using macOS code signing and notarization - an update is installed only if it is signed by the same Developer ID Team as the app currently running.
 
 ## Requirements
 
@@ -12,10 +8,8 @@ the app currently running.
 - Swift tools 6.0+
 - The app must be Developer ID signed and notarized, distributed outside the
   Mac App Store. Self-replacing the app bundle does not work under App
-  Sandbox and is not allowed on the App Store. Sunshine returns
-  `SunshineError.sandboxedAppUnsupported` if it detects a sandboxed app.
-- Apple Silicon and universal binaries only. Intel-only release assets are
-  not selected.
+  Sandbox.
+- Apple Silicon and universal binaries only. Intel-only releases are ignored.
 - Release assets must be a `.zip` or `.dmg` containing a single top-level
   `.app`.
 
@@ -29,8 +23,8 @@ Add Sunshine as a Swift Package dependency:
 
 Two products are available:
 
-- `Sunshine` — core engine plus the SwiftUI update UI.
-- `SunshineCore` — core engine only, no SwiftUI/AppKit dependency.
+- `Sunshine`: core engine plus the SwiftUI update UI.
+- `SunshineCore`: core engine only, no SwiftUI/AppKit dependency.
 
 ## Naming release assets
 
@@ -60,8 +54,11 @@ func applicationDidFinishLaunching(_ notification: Notification) {
 }
 ```
 
-If this is omitted, Sunshine falls back to checking whether a process with
-the app's bundle ID is running, which is a weaker signal of relaunch success.
+If this is omitted, Sunshine falls back to checking whether the new bundle's
+executable is running, which is a weaker signal of relaunch success.
+
+`SunshineUpdater`'s initialiser calls this for you, so wiring it explicitly
+only matters if you construct the updater lazily rather than at launch.
 
 ## Usage: SwiftUI
 
@@ -118,26 +115,37 @@ passive notification.
 ### Settings pane
 
 `SunshineUpdateSettingsView` is a prebuilt "Updates" pane for a `Settings`
-scene, in the style of apps like Tailscale's About tab — app identity,
-Automatically Check For Updates / Install Updates Automatically toggles, a
-Stable/Pre-release channel picker, and a Check Now button with a last-check
-timestamp:
+scene. It shows app
+identity, Automatically Check For Updates / Install Updates Automatically
+toggles, a Stable/Pre-release channel picker, and a Check Now button with a
+last-check timestamp. When a check finds an update, the review (release
+notes, Install & Relaunch, Skip, Remind Me Later) appears inline in the pane:
 
 ```swift
 Settings {
-    SunshineUpdateSettingsView(updater: updaterUI.updater)
+    SunshineUpdateSettingsView(controller: updaterUI)
 }
 ```
 
 Its toggles read and write live settings on `SunshineUpdater`
 (`isAutomaticallyCheckingForUpdates`, `automationLevel`, `allowPrereleases`),
 which persist to `UserDefaults` per bundle identifier and take effect
-immediately — no relaunch or extra wiring required. Pass
+immediately, with no relaunch or extra wiring required. Pass
 `showChannelPicker: false` to hide the prerelease picker.
+
+Check Now routes through `controller.refreshUpdateStatus()`, so a version the
+user previously skipped or deferred is resurfaced here rather than reported as
+"up to date". While the pane is on screen it sets
+`controller.suppressesUpdateSheet`, so an update it finds shows in the pane and
+does not also pop as a sheet from `.sunshineUpdater` on another window; the
+"Check for Updates…" menu command is unaffected when the pane is closed.
+
+`SunshineUpdater` also exposes `skippedVersion` and `isRemindingLater` (both
+read-only) for a host that wants to reflect that state in its own UI.
 
 ## Usage: headless
 
-Depend on `SunshineCore` alone and drive the pipeline directly:
+Depending on `SunshineCore` alone:
 
 ```swift
 import SunshineCore
@@ -151,12 +159,12 @@ let updater = SunshineUpdater(configuration: SunshineConfiguration(
 // One-shot, fully automatic:
 try await updater.checkDownloadVerifyAndInstall(silently: true)
 
-// Or drive each step directly, e.g. for custom UI:
+// Or run each step directly, e.g. for custom UI:
 let result = await updater.checkForUpdates()
 if case .updateAvailable(let update) = result {
     let downloaded = try await updater.download(update)
     let verified = try await updater.verify(downloaded)
-    try await updater.install(verified) // quits, swaps, relaunches; does not return on success
+    try await updater.install(verified) // stages the swap, then terminates this process
 }
 
 // Or observe progress via the event stream:
@@ -196,7 +204,7 @@ ready-made UI for these.
 
 | Field                 | Default                    | Purpose                                                                                                                  |
 | --------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `owner`, `repo`       | —                          | GitHub repository to check for releases                                                                                  |
+| `owner`, `repo`       | (required)                 | GitHub repository to check for releases                                                                                  |
 | `allowPrereleases`    | `false`                    | Consider releases marked "prerelease"                                                                                    |
 | `assetMatcher`        | `.zipOrDmgContainingApp()` | How to pick an asset from a release; also accepts `.regex` or `.custom`                                                  |
 | `githubToken`         | `nil`                      | Raises the API rate limit from 60/hr to 5000/hr; recommended if checking more than hourly                                |
@@ -214,21 +222,52 @@ seconds, with exponential backoff on repeated failures.
    qualifying) GitHub release, compare its tag against the running app's
    version. An update is available only if the candidate version is strictly
    newer than the running version.
-2. Download: fetch the matched asset to a per-app cache directory.
+2. Download: `URLSession` streams the asset to a system temporary file, which
+   is then moved into a per-app cache directory:
+   `~/Library/Caches/<bundleIdentifier>/Sunshine/updates/<releaseTag>/<assetName>`.
+   Extraction happens in an `extracted/` folder alongside it. This directory
+   is left in place after install for the caller to clean up.
 3. Verify: extract the `.app`, check its code signature is valid, and check
    its Team ID matches the currently running app's Team ID (read live via
    `SecCodeCopySelf`, not from cached config). If `requireNotarization` is
    set, also check notarization/Gatekeeper acceptance. Any failure here
    rejects the update.
-4. Install: while the app is still running, move the old bundle aside, move
-   the verified new bundle into place, clear its quarantine flag, launch it,
-   and wait for it to confirm it started. If any step fails, roll back to the
-   old bundle and leave the running app in place.
+4. Install: clear the new bundle's quarantine flag, write a breadcrumb file
+   recording the pending swap, and spawn a detached `/bin/sh` script. The app
+   then terminates itself normally. `SunshineUI` uses `NSApp.terminate(nil)`,
+   so the app delegate, autosave, and any unsaved-changes prompt all run;
+   headless callers get `exit(0)`.
+5. Swap: once the host process is gone, the script moves the old bundle
+   aside, moves the new bundle into place, relaunches it, and waits for the
+   sentinel file the new process writes at startup. On confirmation it
+   deletes the old bundle and itself. If the relaunch is never confirmed, it
+   deletes the new bundle, restores the old one, and reopens it.
+
+Nothing on disk moves while the app is still running. The script waits for
+the host process with no timeout, so a host that never exits means the update
+does not happen. The script never swaps the bundle under a live process. If
+termination is refused (`applicationShouldTerminate` returning
+`.terminateCancel`, or a user dismissing a save prompt), call
+`updater.abortPendingInstall()` to stand the script down; `install()` does
+this on its own 20 seconds after asking the process to terminate.
+
+That signal only applies while the app is alive. Once the process exits the
+script proceeds regardless, so an app that takes a long time in a save dialog
+and then quits still gets the update rather than silently coming back on the
+old version.
+
+Because the swap happens after this process exits, its outcome cannot be
+reported through `events` or the delegate. Only failures raised before the
+script is spawned surface as `.installFailed`. The script logs to
+`~/Library/Caches/<bundleIdentifier>/Sunshine/relaunch.log`.
 
 `install()` requires the install location to be writable by the current
 user. There is no privileged-helper fallback: if the location isn't
 writable, it returns `SunshineError.installLocationNotWritable` along with
 the release's page URL for a manual download.
+
+If the script itself dies mid-swap, the breadcrumb file lets the next launch
+restore the aside'd bundle before anything else runs.
 
 ## Development
 
@@ -243,8 +282,8 @@ axo clean   # swift package clean
 ## Example app
 
 `Sources/SunshineExample` is a small SwiftUI app that showcases every view
-`SunshineUI` provides — `SunshineUpdateSettingsView`, `UpdateAvailableView`,
-`UpdateIndicatorView`, `UpdateErrorView`, and `DownloadProgressView` — picked
+`SunshineUI` provides (`SunshineUpdateSettingsView`, `UpdateAvailableView`,
+`UpdateIndicatorView`, `UpdateErrorView`, and `DownloadProgressView`), picked
 from a sidebar. It runs against a fixed, in-memory list of releases via
 `StaticReleasesProvider` (see below), so it never hits the network.
 
@@ -259,8 +298,8 @@ strudel run
 
 `StaticReleasesProvider` conforms to `ReleasesProviding` (the same protocol
 `GitHubReleasesClient` uses) and serves a fixed `[GitHubRelease]` array
-instead of hitting the GitHub API. Pass one to `SunshineUpdater` to drive it
-from known data — this is what the example app and `SunshineUI`'s
+instead of accessing the GitHub API. Pass one to `SunshineUpdater` to run it
+from known data. This is what the example app and `SunshineUI`'s
 `#Preview`s use:
 
 ```swift
@@ -275,34 +314,3 @@ let updater = SunshineUpdater(
     releasesProvider: StaticReleasesProvider(releases: releases)
 )
 ```
-
-## Remaining work
-
-The core engine, installer, verification, and both UI/headless integration
-paths are implemented and covered by unit tests (25 passing: version
-comparison, asset matching, verification logic, install session). Not done:
-
-- Manual end-to-end testing against a real signed/notarized app. Unit tests
-  mock code signing and the relaunch handshake; the full pipeline has not
-  been run against a real Developer ID identity. This needs:
-  - A small throwaway demo app, signed and notarized, published as two
-    GitHub releases at different versions (one as `.zip`, one as `.dmg`) to
-    exercise both extraction paths.
-  - A run of the full check → download → verify → install → relaunch flow,
-    confirming the relaunched app reports the new version and the old bundle
-    is removed.
-  - A forced rollback (break the relaunch handshake, or block the
-    destination path) to confirm the old app keeps running.
-  - A permission-denied install location, to confirm the error path with no
-    partial file operations.
-  - Confirming `com.apple.quarantine` is present after download/extraction
-    and absent after install.
-  - A deliberately corrupted binary and a build signed with a different Team
-    ID, to confirm both are rejected before any install step runs.
-- No CI workflow for running `swift test` on push.
-- No versioned release of the package.
-- Deferred from the original design, out of scope for v1: a separate
-  relaunch-helper process (the current approach is an in-process
-  `NSWorkspace` launch plus a sentinel-file handshake), a privileged
-  installer helper for non-writable install locations, `.pkg` asset support,
-  and staged/percentage rollouts.
