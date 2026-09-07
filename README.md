@@ -175,7 +175,7 @@ Automatic checks run on launch (rate-limited) and every `checkInterval` seconds,
 
 ## How verification and install work
 
-1. Check: fetch the latest (or, if prereleases are allowed, most recent qualifying) GitHub release, compare its tag against the running app's version. An update is available only if the candidate version is strictly newer than the running version.
+1. Check: fetch the latest (or, if prereleases are allowed, most recent qualifying) GitHub release, compare its tag against the running app's version. An update is available only if the candidate version is strictly newer than the running version. When an update is found, Sunshine also fetches the recent releases, so the notes of every version the user skipped appear together, newest first.
 2. Download: `URLSession` streams the asset to a system temporary file, which is then moved into a per-app cache directory: `~/Library/Caches/<bundleIdentifier>/Sunshine/updates/<releaseTag>/<assetName>`. Extraction happens in an `extracted/` folder alongside it. This directory is left in place after install for the caller to clean up.
 3. Verify: extract the `.app`, check its code signature is valid, and check its Team ID matches the currently running app's Team ID (read live via `SecCodeCopySelf`, not from cached config). If `requireNotarization` is set, also check notarization/Gatekeeper acceptance. Any failure here rejects the update.
 4. Install: clear the new bundle's quarantine flag, write a breadcrumb file recording the pending swap, and spawn a detached `/bin/sh` script. The app then terminates itself normally. `SunshineUI` uses `NSApp.terminate(nil)`, so the app delegate, autosave, and any unsaved-changes prompt all run; headless callers get `exit(0)`.

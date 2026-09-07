@@ -183,7 +183,7 @@ public final class SunshineUpdater: ObservableObject {
             }
 
             var update = Update(release: latest, asset: asset)
-            update = aggregatingReleaseNotes(for: update, allReleases: releases, runningVersion: runningVersion)
+            update = await aggregatingReleaseNotes(for: update, knownReleases: releases, runningVersion: runningVersion)
 
             if store.skippedVersion() == update.id || store.isRemindingLater(about: update) {
                 state = .upToDate
@@ -217,13 +217,24 @@ public final class SunshineUpdater: ObservableObject {
 
     /// Combines the release notes of every release newer than `runningVersion` (not just
     /// the latest), newest first, so a user who skipped several versions sees them all.
-    private func aggregatingReleaseNotes(for update: Update, allReleases: [GitHubRelease], runningVersion: AppVersion) -> Update {
-        let skipped = allReleases.filter { runningVersion.isUpdate(AppVersion(tag: $0.tagName)) }
-        guard skipped.count > 1 else { return update }
-        let combined = skipped.compactMap { release -> String? in
-            guard let body = release.body, !body.isEmpty else { return nil }
-            return "## \(release.tagName)\n\n\(body)"
-        }.joined(separator: "\n\n---\n\n")
+    ///
+    /// The stable path checks a single release, so the intermediate ones are fetched here
+    /// rather than up front, and only once an update has actually been found: a check that
+    /// finds nothing still costs one API call. A failed fetch falls back to the update's
+    /// own notes rather than failing the check.
+    private func aggregatingReleaseNotes(for update: Update, knownReleases: [GitHubRelease], runningVersion: AppVersion) async -> Update {
+        var candidates = knownReleases
+        if candidates.count <= 1 {
+            let recent = try? await client.fetchRecentReleases(owner: configuration.owner, repo: configuration.repo)
+            if let recent {
+                candidates = recent.filter { !$0.draft && (configuration.allowPrereleases || !$0.prerelease) }
+            }
+        }
+
+        guard let combined = ReleaseNotesAggregation.combinedNotes(
+            for: update, candidates: candidates, runningVersion: runningVersion
+        ) else { return update }
+
         return Update(release: GitHubRelease(
             tagName: update.id, name: nil, body: combined, draft: false,
             prerelease: update.isPrerelease, publishedAt: update.publishedAt,
