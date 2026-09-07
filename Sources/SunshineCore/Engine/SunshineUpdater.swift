@@ -35,6 +35,7 @@ public final class SunshineUpdater: ObservableObject {
 
     private var schedulingTask: Task<Void, Never>?
     private var currentVerified: VerifiedUpdate?
+    private var downloadTask: Task<(URL, URLResponse), any Error>?
 
     /// - Parameter releasesProvider: Source of release data. Defaults to a real
     ///   `GitHubReleasesClient`; pass a `StaticReleasesProvider` to drive this updater from a
@@ -262,12 +263,24 @@ public final class SunshineUpdater: ObservableObject {
                 }
             }
             let request = URLRequest(url: update.asset.browserDownloadURL)
-            let (downloadedURL, _) = try await URLSession.shared.download(for: request, delegate: progressDelegate)
+            // Held so `cancelDownload()` has something to cancel. Cancelling the task
+            // cancels the underlying URLSession transfer.
+            let task = Task { try await URLSession.shared.download(for: request, delegate: progressDelegate) }
+            downloadTask = task
+            defer { downloadTask = nil }
+
+            let (downloadedURL, _) = try await task.value
             if FileManager.default.fileExists(atPath: archiveURL.path) {
                 try FileManager.default.removeItem(at: archiveURL)
             }
             try FileManager.default.moveItem(at: downloadedURL, to: archiveURL)
         } catch {
+            // A user-initiated cancel returns to the review rather than reporting a
+            // failure: nothing went wrong, and the update is still available.
+            guard !Self.isCancellation(error) else {
+                state = .updateAvailable(update)
+                throw SunshineError.cancelled
+            }
             let wrapped = SunshineError.downloadFailed(underlying: error)
             state = .error(wrapped)
             throw wrapped
@@ -276,6 +289,26 @@ public final class SunshineUpdater: ObservableObject {
         state = .downloading(update, fractionComplete: 1)
         emit(.downloadProgress(fractionComplete: 1, bytesWritten: Int64(update.asset.size), bytesTotal: Int64(update.asset.size)))
         return DownloadedUpdate(update: update, archiveURL: archiveURL, tempDirectory: tempDirectory)
+    }
+
+    /// Whether a download is in flight and can still be cancelled. Verification and
+    /// install are not cancellable: both are short, and abandoning a swap partway is
+    /// worse than finishing it.
+    public var isDownloadCancellable: Bool { downloadTask != nil }
+
+    /// Cancels an in-flight download. ``download(_:)`` then throws
+    /// ``SunshineError/cancelled`` and the state returns to `.updateAvailable`, so the
+    /// user can start it again. Does nothing if no download is running.
+    public func cancelDownload() {
+        downloadTask?.cancel()
+    }
+
+    /// URLSession surfaces a cancelled transfer as `URLError.cancelled`, while cancelling
+    /// before the request starts throws `CancellationError`.
+    private static func isCancellation(_ error: any Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError, urlError.code == .cancelled { return true }
+        return false
     }
 
     public func verify(_ downloaded: DownloadedUpdate) async throws -> VerifiedUpdate {

@@ -22,6 +22,9 @@ public final class SunshineUpdaterUIController: ObservableObject {
     @Published public private(set) var isInstalling: Bool = false
     /// Human-readable description of the current install phase, e.g. "Verifying update…".
     @Published public private(set) var statusText: String = ""
+    /// True only while the download is in flight. Drives the Cancel button, which is
+    /// hidden once verification starts, since nothing after that point is cancellable.
+    @Published public private(set) var isDownloading: Bool = false
 
     /// Set by `.sunshineUpdater(_:style:)` to control whether a newly discovered update
     /// auto-presents `isPresentingUpdateSheet`, or just becomes available for a passive
@@ -51,15 +54,22 @@ public final class SunshineUpdaterUIController: ObservableObject {
         case .updateAvailable(let update):
             pendingUpdate = update
             errorMessage = nil
+            // Also the state a cancelled download returns to, so the review has to come
+            // back out of its progress presentation.
+            isInstalling = false
+            isDownloading = false
+            progress = 0
             if updateUIStyle == .sheet && !suppressesUpdateSheet {
                 isPresentingUpdateSheet = true
             }
         case .downloading(_, let fraction):
             progress = fraction
             isInstalling = true
+            isDownloading = true
             statusText = "Downloading update…"
         case .verifying:
             isInstalling = true
+            isDownloading = false
             progress = 0
             statusText = "Verifying update…"
         case .readyToInstall(let update):
@@ -71,6 +81,7 @@ public final class SunshineUpdaterUIController: ObservableObject {
             statusText = "Installing and relaunching…"
         case .error(let error):
             isInstalling = false
+            isDownloading = false
             errorMessage = "\(error)"
             if updateUIStyle == .sheet && !suppressesUpdateSheet {
                 isPresentingUpdateSheet = true
@@ -78,6 +89,7 @@ public final class SunshineUpdaterUIController: ObservableObject {
         case .upToDate:
             isPresentingUpdateSheet = false
             isInstalling = false
+            isDownloading = false
             pendingUpdate = nil
             errorMessage = nil
         default:
@@ -144,11 +156,23 @@ public final class SunshineUpdaterUIController: ObservableObject {
                 let downloaded = try await updater.download(pendingUpdate)
                 let verified = try await updater.verify(downloaded)
                 try await updater.install(verified)
+            } catch SunshineError.cancelled {
+                // The user asked for this, so the review comes back with no error shown.
+                isInstalling = false
+                isDownloading = false
+                errorMessage = nil
             } catch {
                 isInstalling = false
+                isDownloading = false
                 errorMessage = "\(error)"
             }
         }
+    }
+
+    /// Cancels an in-flight download and returns the UI to the update review. Has no
+    /// effect once verification has started.
+    public func cancelDownloadTapped() {
+        updater.cancelDownload()
     }
 
     public func remindLaterTapped() {

@@ -75,6 +75,14 @@ struct UpdateReviewContent: View {
                         }
                         .progressViewStyle(.linear)
                     }
+                    // Only the download is cancellable; the button goes away once
+                    // verification starts rather than sitting there doing nothing.
+                    if controller.isDownloading {
+                        HStack {
+                            Spacer()
+                            Button("Cancel") { controller.cancelDownloadTapped() }
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity)
             } else {

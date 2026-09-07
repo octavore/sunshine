@@ -80,7 +80,7 @@ private struct UpdaterHost: View {
                 releaseURL: URL(string: "https://github.com/example/example/releases/latest")
             )
         case .downloadProgress:
-            DownloadProgressView(fractionComplete: 0.62, onCancel: {})
+            DownloadProgressView(fractionComplete: 0.62) { controller.cancelDownloadTapped() }
         case .configuration:
             ExampleConfigurationView(controller: controller, appliedReleaseConfig: releaseConfig) { releaseConfig = $0 }
         }
