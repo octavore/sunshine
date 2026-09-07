@@ -2,6 +2,7 @@ import Foundation
 
 public enum SunshineError: Error, Sendable {
     case network(underlying: any Error)
+    case invalidRepository(owner: String, repo: String)
     case rateLimited(resetAt: Date?)
     case noMatchingAsset
     case versionParseFailure(String)
@@ -20,6 +21,8 @@ extension SunshineError: CustomStringConvertible {
         switch self {
         case .network(let underlying):
             return "Network error: \(underlying.localizedDescription)"
+        case .invalidRepository(let owner, let repo):
+            return "Could not build a GitHub API URL for repository \"\(owner)/\(repo)\"."
         case .rateLimited(let resetAt):
             if let resetAt {
                 return "GitHub API rate limit exceeded. Try again after \(resetAt)."

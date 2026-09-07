@@ -6,9 +6,11 @@ import Foundation
 enum RelaunchCoordinator {
     static let relaunchArgumentPrefix = "--sunshine-relaunched-from="
 
+    /// Both the script and the relaunched app derive this from the same raw tag, so the
+    /// sanitizing has to happen here, in one place, or the handshake never matches.
     static func sentinelURL(forBundleIdentifier bundleIdentifier: String, releaseTag: String) -> URL {
         SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
-            .appendingPathComponent("launched-ok-\(releaseTag)")
+            .appendingPathComponent("launched-ok-\(SunshineCache.safeComponent(releaseTag))")
     }
 
     static func scriptURL(forBundleIdentifier bundleIdentifier: String) -> URL {

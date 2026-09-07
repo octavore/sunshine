@@ -246,7 +246,9 @@ public final class SunshineUpdater: ObservableObject {
         state = .downloading(update, fractionComplete: 0)
         let tempDirectory = SunshineCache.updateDirectory(forBundleIdentifier: bundleIdentifier, releaseTag: update.id)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-        let archiveURL = tempDirectory.appendingPathComponent(update.asset.name)
+        // The asset name comes from the API response, so it is sanitized before it becomes
+        // a filename. The extension survives, which is what the extractor dispatches on.
+        let archiveURL = tempDirectory.appendingPathComponent(SunshineCache.safeComponent(update.asset.name))
 
         do {
             let progressDelegate = DownloadProgressForwarder { [weak self] fraction in

@@ -87,29 +87,44 @@ import Foundation
     /// - Parameter installPathOverride: substituted for the real install path, to exercise
     ///   the script's absolute-path guard.
     @discardableResult
-    private func run(_ fixture: Fixture, hostPID: String = "0", installPathOverride: String? = nil) throws -> Int32 {
-        let openStub = fixture.root.appendingPathComponent("open-stub.sh").path
-        let pgrepStub = fixture.root.appendingPathComponent("pgrep-stub.sh").path
+    private func run(
+        _ fixture: Fixture,
+        hostPID: String = "0",
+        installPathOverride: String? = nil,
+        openCommandOverride: String? = nil
+    ) throws -> Int32 {
+        let plan = RelaunchPlan(
+            scriptURL: fixture.scriptURL,
+            hostProcessIdentifier: Int32(hostPID) ?? 0,
+            installURL: URL(fileURLWithPath: installPathOverride ?? fixture.installURL.path),
+            asideURL: fixture.asideURL,
+            stagedURL: fixture.stagedURL,
+            sentinelURL: fixture.sentinelURL,
+            markerURL: fixture.markerURL,
+            abortURL: fixture.abortURL,
+            logURL: fixture.logURL,
+            releaseTag: "v1.1.0",
+            openCommand: openCommandOverride ?? fixture.root.appendingPathComponent("open-stub.sh").path,
+            pgrepCommand: fixture.root.appendingPathComponent("pgrep-stub.sh").path,
+            sentinelTimeoutSeconds: 1
+        )
+
+        var arguments = plan.arguments
+        // `URL(fileURLWithPath:)` normalizes away the malformed paths the guard exists to
+        // reject, so the override is substituted after the plan is built.
+        if let installPathOverride {
+            arguments[2] = installPathOverride
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = [
-            fixture.scriptURL.path,
-            hostPID,
-            installPathOverride ?? fixture.installURL.path,
-            fixture.asideURL.path,
-            fixture.stagedURL.path,
-            fixture.sentinelURL.path,
-            fixture.markerURL.path,
-            fixture.abortURL.path,
-            fixture.logURL.path,
-            "v1.1.0",
-        ]
+        process.arguments = arguments
+        // Deliberately hostile: the script must not take any of these into account.
         process.environment = [
-            "SUNSHINE_OPEN": openStub,
-            "SUNSHINE_PGREP": pgrepStub,
-            "SUNSHINE_SENTINEL_TIMEOUT": "1",
-            "PATH": "/usr/bin:/bin",
+            "PATH": "/nonexistent",
+            "SUNSHINE_OPEN": "/bin/echo",
+            "SUNSHINE_PGREP": "/usr/bin/true",
+            "SUNSHINE_SENTINEL_TIMEOUT": "9999",
         ]
         try process.run()
         process.waitUntilExit()
@@ -203,6 +218,32 @@ import Foundation
         #expect(fixture.read(fixture.installURL) == "OLD")
         #expect(fixture.read(fixture.stagedURL) == "NEW")
         #expect(fixture.openInvocations.isEmpty)
+    }
+
+    /// `run` sets SUNSHINE_OPEN to /bin/echo, which would write no sentinel and leave no
+    /// entry in the open log. A committed swap proves the stub from the plan ran instead.
+    @Test func environmentVariablesCannotRedirectTheCommandsTheScriptRuns() throws {
+        let fixture = try makeFixture(relaunchSucceeds: true)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try writeMarker(fixture)
+
+        let status = try run(fixture)
+
+        #expect(status == 0)
+        #expect(fixture.read(fixture.installURL) == "NEW")
+        #expect(fixture.openInvocations.count == 1)
+    }
+
+    @Test(arguments: ["open", "usr/bin/open", ""])
+    func relativeCommandPathsAreRefused(_ openCommand: String) throws {
+        let fixture = try makeFixture(relaunchSucceeds: true)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let status = try run(fixture, openCommandOverride: openCommand)
+
+        #expect(status == 1)
+        #expect(fixture.read(fixture.installURL) == "OLD")
+        #expect(fixture.read(fixture.stagedURL) == "NEW")
     }
 
     @Test func scriptWaitsForTheHostProcessToExit() throws {

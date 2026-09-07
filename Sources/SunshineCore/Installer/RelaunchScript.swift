@@ -13,6 +13,13 @@ struct RelaunchPlan: Sendable, Equatable {
     let abortURL: URL
     let logURL: URL
     let releaseTag: String
+    /// The two executables the script calls out to, as absolute paths. Passed in rather
+    /// than resolved by the script so neither `PATH` nor any other inherited environment
+    /// variable can decide what runs after the host exits. Tests substitute stubs.
+    var openCommand: String = "/usr/bin/open"
+    var pgrepCommand: String = "/usr/bin/pgrep"
+    /// Seconds to wait for the relaunched app to write its sentinel before rolling back.
+    var sentinelTimeoutSeconds: Int = 10
 
     /// Paths are passed as arguments rather than interpolated into the script, so nothing
     /// in a path is ever parsed by the shell.
@@ -28,6 +35,9 @@ struct RelaunchPlan: Sendable, Equatable {
             abortURL.path,
             logURL.path,
             releaseTag,
+            openCommand,
+            pgrepCommand,
+            String(sentinelTimeoutSeconds),
         ]
     }
 }
@@ -45,6 +55,12 @@ enum RelaunchScript {
     # Every path arrives as a positional argument, so no path is ever shell-parsed.
     set -u
 
+    # The standard utilities below (mv, rm, date, sleep, kill, touch) are resolved from a
+    # fixed PATH rather than whatever the host app happened to export, for the same reason
+    # the two commands below arrive as arguments.
+    PATH=/usr/bin:/bin
+    export PATH
+
     HOST_PID="$1"
     INSTALL_PATH="$2"
     ASIDE_PATH="$3"
@@ -54,10 +70,11 @@ enum RelaunchScript {
     ABORT_PATH="$7"
     LOG_PATH="$8"
     RELEASE_TAG="$9"
-
-    OPEN_CMD="${SUNSHINE_OPEN:-open}"
-    PGREP_CMD="${SUNSHINE_PGREP:-pgrep}"
-    SENTINEL_TIMEOUT="${SUNSHINE_SENTINEL_TIMEOUT:-10}"
+    # Absolute paths supplied by the host, never read from the environment: this script
+    # runs after the app has exited, so nothing inherited should choose what it executes.
+    OPEN_CMD="${10}"
+    PGREP_CMD="${11}"
+    SENTINEL_TIMEOUT="${12}"
 
     log() {
         echo "[sunshine $(date '+%Y-%m-%d %H:%M:%S')] $1" >>"$LOG_PATH" 2>/dev/null
@@ -70,6 +87,13 @@ enum RelaunchScript {
         case "$path" in
             /*/*.app) ;;
             *) log "refusing to run: '$path' is not an absolute path to a .app bundle"; exit 1 ;;
+        esac
+    done
+
+    for command in "$OPEN_CMD" "$PGREP_CMD"; do
+        case "$command" in
+            /*) ;;
+            *) log "refusing to run: '$command' is not an absolute path"; exit 1 ;;
         esac
     done
 

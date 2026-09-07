@@ -70,7 +70,10 @@ private struct PassingChecker: CodeSigningChecking {
         #expect(plan.releaseTag == "v1.1.0")
         #expect(plan.hostProcessIdentifier == ProcessInfo.processInfo.processIdentifier)
         #expect(plan.asideURL.lastPathComponent.hasPrefix(".MyApp (old, "))
-        #expect(plan.arguments.count == 10)
+        #expect(plan.arguments.count == 13)
+        // The script must never resolve these two through the environment.
+        #expect(plan.openCommand == "/usr/bin/open")
+        #expect(plan.pgrepCommand == "/usr/bin/pgrep")
         #expect(FileManager.default.fileExists(atPath: plan.markerURL.path))
     }
 
