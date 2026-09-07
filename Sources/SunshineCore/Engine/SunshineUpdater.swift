@@ -28,10 +28,24 @@ public final class SunshineUpdater: ObservableObject {
     private let bundleIdentifier: String
     private let installURL: URL
 
-    private var eventContinuation: AsyncStream<UpdateEvent>.Continuation?
-    public lazy var events: AsyncStream<UpdateEvent> = AsyncStream { continuation in
-        self.eventContinuation = continuation
-    }
+    private let eventContinuation: AsyncStream<UpdateEvent>.Continuation
+
+    /// Progress events, for a caller that prefers a stream to ``SunshineUpdaterDelegate``.
+    ///
+    /// This is a **single-consumer** stream. It is one `AsyncStream` shared by everyone who
+    /// reads this property, not a broadcast: a second `for await` loop over it does not get
+    /// its own copy, it competes with the first, and each event is delivered to whichever
+    /// loop happens to be waiting. Iterate it from exactly one place, and use the delegate
+    /// if more than one part of the app needs to observe.
+    ///
+    /// The stream is live from `init`, so events emitted before anything starts iterating
+    /// are buffered rather than dropped. The buffer keeps the newest
+    /// ``eventBufferSize`` events: a consumer that stops iterating without breaking the
+    /// loop cannot grow it without bound, but it will miss the oldest events it skipped.
+    public let events: AsyncStream<UpdateEvent>
+
+    /// How many unconsumed events the stream holds before it starts discarding the oldest.
+    public static let eventBufferSize = 256
 
     private var schedulingTask: Task<Void, Never>?
     private var currentVerified: VerifiedUpdate?
@@ -41,6 +55,15 @@ public final class SunshineUpdater: ObservableObject {
     ///   `GitHubReleasesClient`; pass a `StaticReleasesProvider` to drive this updater from a
     ///   fixed list of releases instead, e.g. for SwiftUI previews, examples, or tests.
     public init(configuration: SunshineConfiguration, releasesProvider: (any ReleasesProviding)? = nil) {
+        // Built here rather than lazily on first read, so an event emitted before the host
+        // subscribes is buffered instead of dropped. The background check loop starts in
+        // this initializer, so that window is real.
+        var continuation: AsyncStream<UpdateEvent>.Continuation!
+        self.events = AsyncStream(bufferingPolicy: .bufferingNewest(Self.eventBufferSize)) {
+            continuation = $0
+        }
+        self.eventContinuation = continuation
+
         self.configuration = configuration
         self.client = releasesProvider ?? GitHubReleasesClient(token: configuration.githubToken)
         self.verifier = UpdateVerifier(requireNotarization: configuration.requireNotarization)
@@ -468,6 +491,11 @@ public final class SunshineUpdater: ObservableObject {
     }
 
     private func emit(_ event: UpdateEvent) {
-        eventContinuation?.yield(event)
+        eventContinuation.yield(event)
+    }
+
+    deinit {
+        // Ends any `for await` loop over `events` rather than leaving it suspended forever.
+        eventContinuation.finish()
     }
 }
