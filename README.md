@@ -105,7 +105,7 @@ Its toggles read and write live settings on `SunshineUpdater` (`isAutomaticallyC
 
 Check Now routes through `controller.refreshUpdateStatus()`, so a version the user previously skipped or deferred is resurfaced here rather than reported as "up to date". While the pane is on screen it sets `controller.suppressesUpdateSheet`, so an update it finds shows in the pane and does not also pop as a sheet from `.sunshineUpdater` on another window; the "Check for Updates…" menu command is unaffected when the pane is closed.
 
-`SunshineUpdater` also exposes `skippedVersion` and `isRemindingLater` (both read-only) for a host that wants to reflect that state in its own UI.
+`SunshineUpdater` also exposes `skippedVersion`, `isRemindingLater`, and `remindLaterVersion` (all read-only) for a host that wants to reflect that state in its own UI. "Remind Me Later" defers only the version it was used on, so a release published during the deferral is still offered.
 
 ## Usage: headless
 

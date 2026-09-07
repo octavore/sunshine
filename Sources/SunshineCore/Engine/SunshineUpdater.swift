@@ -123,10 +123,14 @@ public final class SunshineUpdater: ObservableObject {
     /// A check treats this version as "up to date"; ``clearSkippedVersion()`` undoes it.
     public var skippedVersion: String? { store.skippedVersion() }
 
-    /// Whether an active "remind me later" deferral is currently suppressing an
-    /// otherwise-available update. Cleared by ``clearSkippedVersion()`` or when the
-    /// deferral interval elapses.
+    /// Whether a "remind me later" deferral is currently active. Only the deferred
+    /// version is suppressed; a newer release published during the deferral is still
+    /// offered. Cleared by ``clearSkippedVersion()`` or when the interval elapses.
     public var isRemindingLater: Bool { store.isRemindingLater() }
+
+    /// The release tag the user deferred via ``remindLater(_:for:)``, or `nil` if there
+    /// is no active deferral.
+    public var remindLaterVersion: String? { store.remindLaterVersion() }
 
     // MARK: - Headless / programmatic API
 
@@ -181,7 +185,7 @@ public final class SunshineUpdater: ObservableObject {
             var update = Update(release: latest, asset: asset)
             update = aggregatingReleaseNotes(for: update, allReleases: releases, runningVersion: runningVersion)
 
-            if store.skippedVersion() == update.id || store.isRemindingLater() {
+            if store.skippedVersion() == update.id || store.isRemindingLater(about: update) {
                 state = .upToDate
                 let result = UpdateCheckResult.noUpdateAvailable(latestKnown: update, releaseURL: update.htmlURL)
                 emit(.checkFinished(result))
