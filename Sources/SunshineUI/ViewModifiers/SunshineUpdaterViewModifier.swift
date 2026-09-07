@@ -9,10 +9,9 @@ private struct SunshineUpdaterModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .task {
-                controller.updateUIStyle = style
-                await controller.startIfConfigured()
-            }
+            // Set synchronously on appear rather than from a `task`, so the style is in
+            // place before a check that completes early can raise a sheet.
+            .onAppear { controller.updateUIStyle = style }
             .sheet(isPresented: $controller.isPresentingUpdateSheet) {
                 if let message = controller.errorMessage {
                     UpdateErrorView(message: message, releaseURL: controller.pendingUpdate?.htmlURL)
@@ -58,9 +57,10 @@ private struct SunshineUpdaterModifier: ViewModifier {
 }
 
 extension View {
-    /// Attaches Sunshine's ready-made update UI and starts its background check loop
-    /// (if `checkInterval` is configured). This is the minimal-setup integration path —
-    /// attach it once, near the root of your scene.
+    /// Attaches Sunshine's ready-made update UI. This is the minimal-setup integration
+    /// path: attach it once, near the root of your scene. The background check loop is
+    /// started by `SunshineUpdater` itself when `checkInterval` is configured, so it runs
+    /// whether or not this modifier is attached.
     ///
     /// - Parameter style: `.sheet` (default) interrupts with a modal as soon as an update
     ///   is found. `.cornerIndicator` instead shows a small badge in the bottom-trailing

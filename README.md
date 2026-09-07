@@ -79,7 +79,7 @@ struct MyApp: App {
 }
 ```
 
-`.sunshineUpdater(_:)` attaches the update UI and starts the background check loop if `checkInterval` is set. It defaults to a modal sheet showing the app icon (auto-detected from `Bundle.main`'s `CFBundleIconFile`/ `CFBundleIconName`, or pass `appIcon:` to override), version diff, rendered release notes, and Install & Relaunch / Remind Me Later / Skip This Version actions. If there's no update, "Check for Updates…" (triggered via `CheckForUpdatesCommand`) shows a "You're up to date!" alert instead.
+`.sunshineUpdater(_:)` attaches the update UI. `SunshineUpdater` starts the background check loop itself when `checkInterval` is set, so checks run whether or not the modifier is attached. The modifier defaults to a modal sheet showing the app icon (auto-detected from `Bundle.main`'s `CFBundleIconFile`/ `CFBundleIconName`, or pass `appIcon:` to override), version diff, rendered release notes, and Install & Relaunch / Remind Me Later / Skip This Version actions. If there's no update, "Check for Updates…" (triggered via `CheckForUpdatesCommand`) shows a "You're up to date!" alert instead.
 
 ### Less obtrusive: corner indicator
 

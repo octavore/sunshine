@@ -35,7 +35,6 @@ public final class SunshineUpdaterUIController: ObservableObject {
     @Published public var suppressesUpdateSheet = false
 
     private var cancellable: AnyCancellable?
-    private var didStart = false
 
     public init(updater: SunshineUpdater) {
         self.updater = updater
@@ -84,13 +83,6 @@ public final class SunshineUpdaterUIController: ObservableObject {
         default:
             break
         }
-    }
-
-    /// Kicks off the automatic background-check loop if `checkInterval` is configured.
-    /// Safe to call multiple times; only starts once. Called by `.sunshineUpdater(_:)`.
-    public func startIfConfigured() async {
-        guard !didStart else { return }
-        didStart = true
     }
 
     public func checkForUpdatesButtonTapped() {
