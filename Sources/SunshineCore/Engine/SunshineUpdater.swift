@@ -468,6 +468,12 @@ public final class SunshineUpdater: ObservableObject {
   public func checkDownloadVerifyAndInstall(silently: Bool) async throws {
     let result = await checkForUpdates()
     guard case .updateAvailable(let update) = result else { return }
+    try await downloadVerifyAndInstall(update, silently: silently)
+  }
+
+  /// Downloads and verifies `update`, then installs it if `silently` is set or
+  /// `automationLevel` is `.autoDownloadAndInstall`.
+  private func downloadVerifyAndInstall(_ update: Update, silently: Bool) async throws {
     let downloaded = try await download(update)
     let verified = try await verify(downloaded)
     if silently || configuration.automationLevel == .autoDownloadAndInstall {
@@ -517,8 +523,8 @@ public final class SunshineUpdater: ObservableObject {
         guard !Task.isCancelled else { return }
         let result = await self.checkForUpdates()
         let automationLevel = self.configuration.automationLevel
-        if case .updateAvailable = result, automationLevel != .manual {
-          try? await self.checkDownloadVerifyAndInstall(silently: false)
+        if case .updateAvailable(let update) = result, automationLevel != .manual {
+          try? await self.downloadVerifyAndInstall(update, silently: false)
         }
       }
     }
