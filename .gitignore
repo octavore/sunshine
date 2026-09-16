@@ -1,1 +1,4 @@
 .build/
+.rumdl_cache/
+.vscode/
+.DS_Store
