@@ -43,7 +43,9 @@ struct InstallSession: Sendable {
             releaseTag: verified.update.id,
             startedAt: Date()
         )
-        try? marker.write(to: markerURL)
+        // A write failure aborts the install. Without the marker, the next launch cannot
+        // restore the bundle if the script dies mid-swap.
+        try marker.write(to: markerURL)
 
         let sentinelURL = RelaunchCoordinator.sentinelURL(forBundleIdentifier: bundleIdentifier, releaseTag: verified.update.id)
         let abortURL = RelaunchCoordinator.abortURL(forBundleIdentifier: bundleIdentifier)
