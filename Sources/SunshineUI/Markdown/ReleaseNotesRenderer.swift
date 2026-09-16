@@ -24,16 +24,39 @@ enum ReleaseNotesRenderer {
     for run in input.runs {
       let components = run.presentationIntent?.components ?? []
       let identity = components.first?.identity
+      let listItemComponent = components.first {
+        if case .listItem = $0.kind { return true } else { return false }
+      }
       if let previousIdentity, identity != previousIdentity {
-        let isListItem = components.contains {
-          if case .listItem = $0.kind { return true } else { return false }
-        }
-        result += AttributedString(isListItem ? "\n" : "\n\n")
+        result += AttributedString(listItemComponent != nil ? "\n" : "\n\n")
+      }
+      if let listItemComponent, identity != previousIdentity {
+        result += AttributedString(marker(for: listItemComponent, in: components))
       }
       result += input[run.range]
       previousIdentity = identity
     }
 
     return result
+  }
+
+  /// List items carry no literal bullet or number; `PresentationIntent` only records the
+  /// ordinal and list kind. Build the marker text ourselves, indenting for nested lists.
+  private static func marker(
+    for listItemComponent: PresentationIntent.IntentType,
+    in components: [PresentationIntent.IntentType]
+  ) -> String {
+    guard case .listItem(let ordinal) = listItemComponent.kind else { return "" }
+    let nestingDepth = components.filter {
+      switch $0.kind {
+      case .unorderedList, .orderedList: return true
+      default: return false
+      }
+    }.count
+    let indent = String(repeating: "  ", count: max(0, nestingDepth - 1))
+    let isOrdered = components.contains {
+      if case .orderedList = $0.kind { return true } else { return false }
+    }
+    return isOrdered ? "\(indent)\(ordinal). " : "\(indent)• "
   }
 }
