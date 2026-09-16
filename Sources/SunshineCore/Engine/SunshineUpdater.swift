@@ -146,6 +146,11 @@ public final class SunshineUpdater: ObservableObject {
   /// When the most recent check (successful or not) ran, for display in settings UI.
   public var lastCheckDate: Date? { store.lastCheckDate() }
 
+  /// The repository's GitHub releases page, for linking out from settings UI.
+  public var releasesPageURL: URL? {
+    URL(string: "https://github.com/\(configuration.owner)/\(configuration.repo)/releases")
+  }
+
   /// The release tag the user chose to skip via ``skip(_:)``, or `nil` if none.
   /// A check treats this version as "up to date"; ``clearSkippedVersion()`` undoes it.
   public var skippedVersion: String? { store.skippedVersion() }

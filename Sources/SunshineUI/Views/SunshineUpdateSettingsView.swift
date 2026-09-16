@@ -48,8 +48,15 @@ public struct SunshineUpdateSettingsView: View {
         }
         VStack(alignment: .leading, spacing: 2) {
           Text(appName).font(.title2.bold())
-          Text("Version \(AppVersion.fromMainBundle().shortVersion)")
+          if let releasesPageURL = updater.releasesPageURL {
+            Link(
+              "Version \(AppVersion.fromMainBundle().shortVersion)", destination: releasesPageURL
+            )
             .foregroundStyle(.secondary)
+          } else {
+            Text("Version \(AppVersion.fromMainBundle().shortVersion)")
+              .foregroundStyle(.secondary)
+          }
         }
       }
 
