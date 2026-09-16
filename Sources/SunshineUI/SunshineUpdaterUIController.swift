@@ -38,6 +38,9 @@ public final class SunshineUpdaterUIController: ObservableObject {
   @Published public var suppressesUpdateSheet = false
 
   private var cancellable: AnyCancellable?
+  /// True while the task started by `installTapped()` runs, to tell a user-initiated
+  /// install apart from a background download under `.autoDownload`.
+  private var isInstallTaskRunning = false
 
   public init(updater: SunshineUpdater) {
     self.updater = updater
@@ -74,7 +77,18 @@ public final class SunshineUpdaterUIController: ObservableObject {
       statusText = "Verifying update…"
     case .readyToInstall(let update):
       pendingUpdate = update
-      statusText = "Preparing to install…"
+      if isInstallTaskRunning {
+        statusText = "Preparing to install…"
+      } else {
+        // Downloaded and verified in the background. The review returns with
+        // Install & Relaunch, which installs the verified update.
+        isInstalling = false
+        isDownloading = false
+        progress = 0
+        if updateUIStyle == .sheet && !suppressesUpdateSheet {
+          isPresentingUpdateSheet = true
+        }
+      }
     case .installing:
       isInstalling = true
       progress = 0
@@ -150,11 +164,20 @@ public final class SunshineUpdaterUIController: ObservableObject {
   public func installTapped() {
     guard let pendingUpdate else { return }
     isInstalling = true
+    isInstallTaskRunning = true
     statusText = "Starting update…"
     Task {
+      defer { isInstallTaskRunning = false }
       do {
-        let downloaded = try await updater.download(pendingUpdate)
-        let verified = try await updater.verify(downloaded)
+        // Reuse an update already downloaded and verified, e.g. by the background
+        // loop under `.autoDownload`. `install(_:)` verifies it again before the swap.
+        let verified: VerifiedUpdate
+        if let ready = updater.verifiedUpdate, ready.update == pendingUpdate {
+          verified = ready
+        } else {
+          let downloaded = try await updater.download(pendingUpdate)
+          verified = try await updater.verify(downloaded)
+        }
         try await updater.install(verified)
       } catch SunshineError.cancelled {
         // The user asked for this, so the review comes back with no error shown.

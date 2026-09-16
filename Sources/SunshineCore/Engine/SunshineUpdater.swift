@@ -386,7 +386,7 @@ public final class SunshineUpdater: ObservableObject {
       let verified = VerifiedUpdate(
         update: downloaded.update, extractedAppURL: appURL, tempDirectory: downloaded.tempDirectory,
         verificationReport: report)
-      currentVerified = verified
+      verifiedUpdate = verified
       state = .readyToInstall(downloaded.update)
       emit(.verificationFinished(.success(report)))
       return verified
