@@ -1,4 +1,4 @@
-import SunshineUI
+import Sunshine
 import SwiftUI
 
 /// Lets you inspect and reset the `UserDefaults` state `SunshineUpdater` persists (skipped

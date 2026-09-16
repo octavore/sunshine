@@ -1,5 +1,4 @@
-import SunshineCore
-import SunshineUI
+import Sunshine
 import SwiftUI
 
 enum ExampleScreen: String, CaseIterable, Identifiable {

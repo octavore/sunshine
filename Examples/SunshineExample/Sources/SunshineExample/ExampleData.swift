@@ -1,5 +1,5 @@
 import Foundation
-import SunshineCore
+import Sunshine
 
 /// The example app's owner/repo, matching `ExampleData.updater`'s configuration — used to
 /// derive the same `UserDefaults` key prefix `SunshineUpdater` persists its state under.

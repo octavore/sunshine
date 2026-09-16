@@ -7,7 +7,7 @@ let package = Package(
     .macOS(.v13)
   ],
   products: [
-    .library(name: "Sunshine", targets: ["SunshineCore", "SunshineUI"]),
+    .library(name: "Sunshine", targets: ["Sunshine"]),
     .library(name: "SunshineCore", targets: ["SunshineCore"]),
   ],
   targets: [
@@ -20,8 +20,8 @@ let package = Package(
       dependencies: ["SunshineCore"],
       swiftSettings: [.swiftLanguageMode(.v6)]
     ),
-    .executableTarget(
-      name: "SunshineExample",
+    .target(
+      name: "Sunshine",
       dependencies: ["SunshineCore", "SunshineUI"],
       swiftSettings: [.swiftLanguageMode(.v6)]
     ),
