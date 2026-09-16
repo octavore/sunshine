@@ -5,14 +5,12 @@ public enum SunshineError: Error, Sendable {
   case invalidRepository(owner: String, repo: String)
   case rateLimited(resetAt: Date?)
   case noMatchingAsset
-  case versionParseFailure(String)
   case downloadFailed(underlying: any Error)
   case extractionFailed(underlying: any Error)
   case verificationFailed(VerificationFailure)
   case installLocationNotWritable(URL)
   case sandboxedAppUnsupported
   case relaunchFailed(underlying: any Error)
-  case rollbackFailed(underlying: any Error)
   case cancelled
 }
 
@@ -30,8 +28,6 @@ extension SunshineError: CustomStringConvertible {
       return "GitHub API rate limit exceeded."
     case .noMatchingAsset:
       return "No release asset matched this Mac's architecture and the configured asset pattern."
-    case .versionParseFailure(let string):
-      return "Could not parse version string: \(string)"
     case .downloadFailed(let underlying):
       return "Download failed: \(underlying.localizedDescription)"
     case .extractionFailed(let underlying):
@@ -44,9 +40,6 @@ extension SunshineError: CustomStringConvertible {
       return "Sunshine does not support self-updating sandboxed applications."
     case .relaunchFailed(let underlying):
       return "Failed to relaunch the updated app: \(underlying.localizedDescription)"
-    case .rollbackFailed(let underlying):
-      return
-        "Update failed and could not be rolled back automatically: \(underlying.localizedDescription)"
     case .cancelled:
       return "Update cancelled."
     }

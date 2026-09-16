@@ -1,8 +1,8 @@
 import Foundation
 
-public struct RateLimitInfo: Sendable {
-  public let remaining: Int?
-  public let resetAt: Date?
+struct RateLimitInfo: Sendable {
+  let remaining: Int?
+  let resetAt: Date?
 }
 
 /// Thin wrapper over the GitHub Releases REST API. There is no custom appcast format: the

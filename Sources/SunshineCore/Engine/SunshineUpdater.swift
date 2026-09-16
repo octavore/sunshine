@@ -47,8 +47,11 @@ public final class SunshineUpdater: ObservableObject {
   /// How many unconsumed events the stream holds before it starts discarding the oldest.
   public static let eventBufferSize = 256
 
+  /// The update most recently verified by ``verify(_:)``, or `nil` if none has been.
+  /// Pass it to ``install(_:)`` to install without downloading again.
+  public private(set) var verifiedUpdate: VerifiedUpdate?
+
   private var schedulingTask: Task<Void, Never>?
-  private var currentVerified: VerifiedUpdate?
   private var downloadTask: Task<(URL, URLResponse), any Error>?
 
   /// - Parameter releasesProvider: Source of release data. Defaults to a real
@@ -172,7 +175,7 @@ public final class SunshineUpdater: ObservableObject {
 
     guard !isSandboxed() else {
       let result = UpdateCheckResult.failed(.sandboxedAppUnsupported)
-      state = .error(.sandboxedAppUnsupported)
+      fail(.sandboxedAppUnsupported)
       emit(.checkFinished(result))
       return result
     }
@@ -217,7 +220,7 @@ public final class SunshineUpdater: ObservableObject {
           from: latest.assets, matching: configuration.assetMatcher, bundleName: bundleName)
       else {
         let result = UpdateCheckResult.failed(.noMatchingAsset)
-        state = .error(.noMatchingAsset)
+        fail(.noMatchingAsset)
         emit(.checkFinished(result))
         return result
       }
@@ -241,16 +244,14 @@ public final class SunshineUpdater: ObservableObject {
       return result
     } catch let error as SunshineError {
       store.recordCheckAttempt(succeeded: false, baseInterval: configuration.checkInterval ?? 3600)
-      state = .error(error)
-      delegate?.updater(self, didFailWithError: error)
+      fail(error)
       let result = UpdateCheckResult.failed(error)
       emit(.checkFinished(result))
       return result
     } catch {
       store.recordCheckAttempt(succeeded: false, baseInterval: configuration.checkInterval ?? 3600)
       let wrapped = SunshineError.network(underlying: error)
-      state = .error(wrapped)
-      delegate?.updater(self, didFailWithError: wrapped)
+      fail(wrapped)
       let result = UpdateCheckResult.failed(wrapped)
       emit(.checkFinished(result))
       return result
@@ -336,7 +337,7 @@ public final class SunshineUpdater: ObservableObject {
         throw SunshineError.cancelled
       }
       let wrapped = SunshineError.downloadFailed(underlying: error)
-      state = .error(wrapped)
+      fail(wrapped)
       throw wrapped
     }
 
@@ -391,12 +392,12 @@ public final class SunshineUpdater: ObservableObject {
       emit(.verificationFinished(.success(report)))
       return verified
     } catch let error as SunshineError {
-      state = .error(error)
+      fail(error)
       emit(.verificationFinished(.failure(error)))
       throw error
     } catch {
       let wrapped = SunshineError.extractionFailed(underlying: error)
-      state = .error(wrapped)
+      fail(wrapped)
       emit(.verificationFinished(.failure(wrapped)))
       throw wrapped
     }
@@ -421,13 +422,13 @@ public final class SunshineUpdater: ObservableObject {
         try await session.install(verified, installURL: installURL)
       }.value
     } catch let error as SunshineError {
-      state = .error(error)
-      emit(.installFailed(error, rolledBack: true))
+      fail(error)
+      emit(.installFailed(error))
       throw error
     } catch {
       let wrapped = SunshineError.relaunchFailed(underlying: error)
-      state = .error(wrapped)
-      emit(.installFailed(wrapped, rolledBack: true))
+      fail(wrapped)
+      emit(.installFailed(wrapped))
       throw wrapped
     }
 
@@ -457,8 +458,8 @@ public final class SunshineUpdater: ObservableObject {
   public func abortPendingInstall() {
     RelaunchCoordinator.abortPendingInstall(bundleIdentifier: bundleIdentifier)
     if case .installing = state {
-      state = .error(.cancelled)
-      emit(.installFailed(.cancelled, rolledBack: true))
+      fail(.cancelled)
+      emit(.installFailed(.cancelled))
     }
   }
 
@@ -532,6 +533,12 @@ public final class SunshineUpdater: ObservableObject {
 
   private func isSandboxed() -> Bool {
     ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+  }
+
+  /// Records `error` in `state` and reports it to the delegate.
+  private func fail(_ error: SunshineError) {
+    state = .error(error)
+    delegate?.updater(self, didFailWithError: error)
   }
 
   private func emit(_ event: UpdateEvent) {
