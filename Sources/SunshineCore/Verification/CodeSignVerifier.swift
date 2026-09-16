@@ -7,7 +7,7 @@ enum CodeSignVerifier {
     var description: String { message }
   }
 
-  /// Validates the code signature at `url` (strict, deep, all architectures — equivalent
+  /// Validates the code signature at `url` (strict, deep, all architectures, equivalent
   /// to `codesign --verify --deep --strict`) and returns its Team ID, or throws if the
   /// signature itself is invalid.
   static func teamIdentifier(forSignedBundleAt url: URL) throws -> String? {
@@ -58,7 +58,7 @@ enum CodeSignVerifier {
 
   /// Shells out to `spctl` since there is no public Security.framework symbol for
   /// notarization-ticket verification. Any failure to determine status returns `false`
-  /// (fail closed — callers treat unknown as rejected when notarization is required).
+  /// (fail closed: callers treat unknown as rejected when notarization is required).
   static func checkNotarization(at url: URL) -> Bool {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/sbin/spctl")

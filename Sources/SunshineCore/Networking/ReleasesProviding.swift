@@ -14,7 +14,7 @@ extension GitHubReleasesClient: ReleasesProviding {
   }
 }
 
-/// A `ReleasesProviding` conformer backed by an explicit, fixed list of releases — no network
+/// A `ReleasesProviding` conformer backed by an explicit, fixed list of releases, with no network
 /// access. Pass one to `SunshineUpdater.init(configuration:releasesProvider:)` to drive
 /// previews, examples, or tests against known release data.
 public struct StaticReleasesProvider: ReleasesProviding {

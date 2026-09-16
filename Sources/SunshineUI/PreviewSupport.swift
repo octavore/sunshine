@@ -3,7 +3,7 @@
   import SunshineCore
 
   /// Sample data + a network-free `SunshineUpdater` for `#Preview`s across `SunshineUI`.
-  /// Not part of the public API — built only in debug builds.
+  /// Not part of the public API. Built only in debug builds.
   enum PreviewSupport {
     static let releaseNotes = """
       ## What's New

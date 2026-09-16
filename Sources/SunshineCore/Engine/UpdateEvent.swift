@@ -10,8 +10,8 @@ public enum UpdateEvent: Sendable {
 }
 
 /// Optional callback-style adapter over `SunshineUpdater.events`, for consumers that
-/// prefer delegation to `AsyncStream`. Not a separate code path — implementations should
-/// simply observe the same event stream.
+/// prefer delegation to `AsyncStream`. It is not a separate code path: implementations
+/// observe the same event stream.
 public protocol SunshineUpdaterDelegate: AnyObject, Sendable {
   func updater(_ updater: SunshineUpdater, didFindUpdate update: Update)
   func updater(_ updater: SunshineUpdater, didFailWithError error: SunshineError)

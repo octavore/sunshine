@@ -2,8 +2,8 @@ import SunshineCore
 import SwiftUI
 
 /// A drop-in "Updates" settings pane: app identity, the standard auto-check /
-/// auto-install / channel controls, a Check Now button, and — when a check finds
-/// one — the update review (notes, Install & Relaunch, Skip, Remind Me Later)
+/// auto-install / channel controls, a Check Now button, and, when a check finds
+/// one, the update review (notes, Install & Relaunch, Skip, Remind Me Later)
 /// inline, in the style of apps like Tailscale's "About" tab.
 ///
 /// Reads and writes the updater's live settings directly, so toggling here takes

@@ -11,8 +11,8 @@ public final class SunshineUpdaterUIController: ObservableObject {
   @Published public var isPresentingUpToDateAlert: Bool = false
   @Published public private(set) var upToDateReleaseURL: URL?
   /// Set alongside `isPresentingUpToDateAlert` when the reason the check reported "up to
-  /// date" is that the newest release was previously skipped or is being reminded-later —
-  /// lets the up-to-date alert offer a way back to that update instead of dead-ending.
+  /// date" is that the newest release was previously skipped or deferred with "Remind Me Later". It
+  /// lets the up-to-date alert offer a way back to that update.
   @Published public private(set) var skippedUpdate: Update?
   @Published public private(set) var pendingUpdate: Update?
   @Published public private(set) var progress: Double = 0
@@ -111,7 +111,7 @@ public final class SunshineUpdaterUIController: ObservableObject {
   /// Runs a user-initiated check and leaves the outcome in the controller's
   /// published state, presenting nothing itself. A previously skipped or deferred
   /// version is resurfaced as `pendingUpdate` (the engine otherwise reports it as
-  /// "up to date"), so a host that renders the review inline — the settings pane —
+  /// "up to date"), so a host that renders the review inline, such as the settings pane,
   /// can show it. Returns the raw result for any further host handling.
   ///
   /// Use this when the review is shown in your own UI. Use

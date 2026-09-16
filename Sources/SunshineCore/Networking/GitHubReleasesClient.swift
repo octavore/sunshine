@@ -5,7 +5,7 @@ public struct RateLimitInfo: Sendable {
   public let resetAt: Date?
 }
 
-/// Thin wrapper over the GitHub Releases REST API. No custom appcast format — the
+/// Thin wrapper over the GitHub Releases REST API. There is no custom appcast format: the
 /// release JSON itself (tag, body, assets) is the whole feed.
 public struct GitHubReleasesClient: Sendable {
   public var session: URLSession

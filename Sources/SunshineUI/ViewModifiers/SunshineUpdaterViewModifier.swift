@@ -66,7 +66,7 @@ extension View {
   ///
   /// - Parameter style: `.sheet` (default) interrupts with a modal as soon as an update
   ///   is found. `.cornerIndicator` instead shows a small badge in the bottom-trailing
-  ///   corner that the user opens when ready — see
+  ///   corner that the user opens when ready. See
   ///   https://mitchellh.com/writing/non-trivial-vibing for the design this mirrors.
   public func sunshineUpdater(
     _ controller: SunshineUpdaterUIController,

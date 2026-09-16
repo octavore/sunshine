@@ -1,7 +1,7 @@
 import Foundation
 import Sunshine
 
-/// The example app's owner/repo, matching `ExampleData.updater`'s configuration — used to
+/// The example app's owner/repo, matching `ExampleData.updater`'s configuration. It is used to
 /// derive the same `UserDefaults` key prefix `SunshineUpdater` persists its state under.
 let exampleOwner = "example"
 let exampleRepo = "example"
@@ -73,7 +73,7 @@ enum ExampleData {
       + releases.dropFirst()
   }
 
-  /// A `SunshineUpdater` backed by `StaticReleasesProvider` — no network access, so the
+  /// A `SunshineUpdater` backed by `StaticReleasesProvider` with no network access, so the
   /// example app always shows the same fixed release data.
   @MainActor
   static func updater(config: ExampleReleaseConfig = ExampleReleaseConfig()) -> SunshineUpdater {

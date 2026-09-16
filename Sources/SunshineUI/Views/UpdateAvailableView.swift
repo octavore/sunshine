@@ -19,8 +19,8 @@ public struct UpdateAvailableView: View {
   }
 }
 
-/// The update-review UI — version delta, release notes, and the install / skip /
-/// remind actions (or install progress) — without any outer padding or fixed
+/// The update-review UI (version delta, release notes, and the install / skip /
+/// remind actions, or install progress) without any outer padding or fixed
 /// width, so it fits both `UpdateAvailableView`'s sheet and an inline spot in a
 /// settings pane.
 struct UpdateReviewContent: View {

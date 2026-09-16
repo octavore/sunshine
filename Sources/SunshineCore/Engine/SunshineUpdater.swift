@@ -374,7 +374,7 @@ public final class SunshineUpdater: ObservableObject {
     let verifier = self.verifier
     do {
       // Extraction (`ditto`/`hdiutil`) and verification (`codesign`/`spctl`) shell
-      // out and block for seconds — run them off the main actor so the UI stays live.
+      // out and block for seconds, so they run off the main actor to keep the UI responsive.
       let (appURL, report) = try await Task.detached(priority: .userInitiated) {
         let extractedDirectory = downloaded.tempDirectory.appendingPathComponent(
           "extracted", isDirectory: true)
@@ -463,7 +463,7 @@ public final class SunshineUpdater: ObservableObject {
   }
 
   /// End-to-end convenience path. `silently` skips the `.readyToInstall` pause for a
-  /// single manually-triggered call — it does not change the persistent
+  /// single manually-triggered call. It does not change the persistent
   /// `automationLevel` preference used by the scheduled background-check loop.
   public func checkDownloadVerifyAndInstall(silently: Bool) async throws {
     let result = await checkForUpdates()

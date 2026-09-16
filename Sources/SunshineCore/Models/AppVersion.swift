@@ -110,7 +110,7 @@ public struct AppVersion: Sendable, Equatable, Comparable, CustomStringConvertib
 
   public static func < (lhs: AppVersion, rhs: AppVersion) -> Bool {
     guard let l = parse(lhs.shortVersion), let r = parse(rhs.shortVersion) else {
-      // Unparseable versions never compare as "greater" — fail safe to "no update".
+      // Unparseable versions never compare as "greater", so the result is "no update".
       return false
     }
     switch compare(l, r) {
@@ -119,7 +119,7 @@ public struct AppVersion: Sendable, Equatable, Comparable, CustomStringConvertib
     case .orderedDescending:
       return false
     case .orderedSame:
-      // Short versions equal — fall back to build number as a tiebreak.
+      // Short versions are equal, so the build number breaks the tie.
       switch (lhs.buildVersion, rhs.buildVersion) {
       case (let l?, let r?):
         if let li = Int(l), let ri = Int(r) { return li < ri }
@@ -130,8 +130,8 @@ public struct AppVersion: Sendable, Equatable, Comparable, CustomStringConvertib
     }
   }
 
-  /// True only when `candidate` is strictly newer than `self` — never treats an equal
-  /// or older version as an update, regardless of caller state (downgrade protection).
+  /// True only when `candidate` is strictly newer than `self`. An equal
+  /// or older version is never an update, regardless of caller state (downgrade protection).
   public func isUpdate(_ candidate: AppVersion) -> Bool {
     guard Self.parse(shortVersion) != nil, Self.parse(candidate.shortVersion) != nil else {
       return false

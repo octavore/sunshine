@@ -21,7 +21,7 @@ private struct PassingChecker: CodeSigningChecking {
   }
 
   /// Creates a fake "bundle" (just a directory with a .app extension and a marker
-  /// file) — verification itself is mocked, so the bundle's contents don't need to be
+  /// file). Verification is mocked, so the bundle's contents don't need to be
   /// real code-signed binaries.
   private func makeFakeApp(at url: URL, marker: String) throws {
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

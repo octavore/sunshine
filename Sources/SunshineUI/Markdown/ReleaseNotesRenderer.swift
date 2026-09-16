@@ -1,8 +1,8 @@
 import Foundation
 
 enum ReleaseNotesRenderer {
-  /// `nil` when there's nothing to render — callers should hide the release-notes box
-  /// entirely in that case, rather than show an empty or placeholder state.
+  /// Returns `nil` when there is nothing to render. Callers should hide the release-notes box
+  /// in that case instead of showing an empty or placeholder state.
   static func render(_ markdown: String?) -> AttributedString? {
     guard let markdown, !markdown.isEmpty else { return nil }
     guard
