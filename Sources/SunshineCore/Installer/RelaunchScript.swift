@@ -3,43 +3,43 @@ import Foundation
 /// Everything the relaunch script needs, in the order it reads its positional arguments.
 /// Kept as a struct so tests can assert on what would be spawned without running it.
 struct RelaunchPlan: Sendable, Equatable {
-    let scriptURL: URL
-    let hostProcessIdentifier: Int32
-    let installURL: URL
-    let asideURL: URL
-    let stagedURL: URL
-    let sentinelURL: URL
-    let markerURL: URL
-    let abortURL: URL
-    let logURL: URL
-    let releaseTag: String
-    /// The two executables the script calls out to, as absolute paths. Passed in rather
-    /// than resolved by the script so neither `PATH` nor any other inherited environment
-    /// variable can decide what runs after the host exits. Tests substitute stubs.
-    var openCommand: String = "/usr/bin/open"
-    var pgrepCommand: String = "/usr/bin/pgrep"
-    /// Seconds to wait for the relaunched app to write its sentinel before rolling back.
-    var sentinelTimeoutSeconds: Int = 10
+  let scriptURL: URL
+  let hostProcessIdentifier: Int32
+  let installURL: URL
+  let asideURL: URL
+  let stagedURL: URL
+  let sentinelURL: URL
+  let markerURL: URL
+  let abortURL: URL
+  let logURL: URL
+  let releaseTag: String
+  /// The two executables the script calls out to, as absolute paths. Passed in rather
+  /// than resolved by the script so neither `PATH` nor any other inherited environment
+  /// variable can decide what runs after the host exits. Tests substitute stubs.
+  var openCommand: String = "/usr/bin/open"
+  var pgrepCommand: String = "/usr/bin/pgrep"
+  /// Seconds to wait for the relaunched app to write its sentinel before rolling back.
+  var sentinelTimeoutSeconds: Int = 10
 
-    /// Paths are passed as arguments rather than interpolated into the script, so nothing
-    /// in a path is ever parsed by the shell.
-    var arguments: [String] {
-        [
-            scriptURL.path,
-            String(hostProcessIdentifier),
-            installURL.path,
-            asideURL.path,
-            stagedURL.path,
-            sentinelURL.path,
-            markerURL.path,
-            abortURL.path,
-            logURL.path,
-            releaseTag,
-            openCommand,
-            pgrepCommand,
-            String(sentinelTimeoutSeconds),
-        ]
-    }
+  /// Paths are passed as arguments rather than interpolated into the script, so nothing
+  /// in a path is ever parsed by the shell.
+  var arguments: [String] {
+    [
+      scriptURL.path,
+      String(hostProcessIdentifier),
+      installURL.path,
+      asideURL.path,
+      stagedURL.path,
+      sentinelURL.path,
+      markerURL.path,
+      abortURL.path,
+      logURL.path,
+      releaseTag,
+      openCommand,
+      pgrepCommand,
+      String(sentinelTimeoutSeconds),
+    ]
+  }
 }
 
 /// The shell script that performs the bundle swap after the host process has exited.
@@ -48,7 +48,7 @@ struct RelaunchPlan: Sendable, Equatable {
 /// resource bundle would add a `Bundle.module` lookup and a copy step for every app that
 /// embeds Sunshine, and this needs to work with no build configuration at all.
 enum RelaunchScript {
-    static let source = #"""
+  static let source = #"""
     #!/bin/sh
     # Written and spawned by Sunshine. Waits for the host app to exit, swaps the new
     # bundle into place, relaunches it, and rolls back if the relaunch is not confirmed.
@@ -184,11 +184,12 @@ enum RelaunchScript {
 
     """#
 
-    /// Writes the script to `url`, replacing any copy left by an earlier install.
-    static func write(to url: URL) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? FileManager.default.removeItem(at: url)
-        try source.write(to: url, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-    }
+  /// Writes the script to `url`, replacing any copy left by an earlier install.
+  static func write(to url: URL) throws {
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try? FileManager.default.removeItem(at: url)
+    try source.write(to: url, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+  }
 }
