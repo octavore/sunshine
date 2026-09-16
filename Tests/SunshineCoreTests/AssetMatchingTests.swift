@@ -37,6 +37,27 @@ import Foundation
         #expect(match == nil)
     }
 
+    /// Assets that name a supported architecture or no architecture are accepted, and
+    /// assets that name an Intel architecture are rejected.
+    @Test func namedAndUnnamedArchitecturesAreBothAccepted() {
+        for name in ["MyApp-arm64.zip", "MyApp-universal.zip", "MyApp-apple-silicon.zip", "MyApp.zip"] {
+            let match = AssetMatcher.select(from: [asset(name)], matching: .zipOrDmgContainingApp(), bundleName: nil)
+            #expect(match?.name == name)
+        }
+        for name in ["MyApp-x86_64.zip", "MyApp-x86-64.zip", "MyApp_x8664.zip", "MyApp-x64.zip", "MyApp-intel.zip", "MyApp.Intel.dmg"] {
+            let match = AssetMatcher.select(from: [asset(name)], matching: .zipOrDmgContainingApp(), bundleName: nil)
+            #expect(match == nil)
+        }
+    }
+
+    /// Excluded tokens match whole words, not substrings of the app name.
+    @Test func excludedTokensInsideWordsAreIgnored() {
+        for name in ["IntelliNote-1.0.zip", "Max64-1.0.zip", "Linux64Tools.zip"] {
+            let match = AssetMatcher.select(from: [asset(name)], matching: .zipOrDmgContainingApp(), bundleName: nil)
+            #expect(match?.name == name)
+        }
+    }
+
     @Test func dmgIsAccepted() {
         let assets = [asset("MyApp-1.0.0-universal.dmg")]
         let match = AssetMatcher.select(from: assets, matching: .zipOrDmgContainingApp(), bundleName: nil)

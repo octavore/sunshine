@@ -1,7 +1,7 @@
 import Foundation
 
 /// Selects which release asset to download, applied after architecture filtering
-/// (Apple Silicon / universal only — see `AssetMatcher.select`).
+/// (assets that name an Intel architecture are excluded, see `AssetMatcher.select`).
 public enum AssetMatching: Sendable {
     /// Default: any `.zip` or `.dmg` asset, preferring one whose name contains
     /// `bundleName` (or the running app's `CFBundleName` if `nil`) when several match.
@@ -11,25 +11,34 @@ public enum AssetMatching: Sendable {
 }
 
 public enum AssetMatcher {
-    private static let architectureTokens = ["arm64", "applesilicon", "universal"]
-    private static let excludedArchitectureTokens = ["x8664", "x64", "intel"]
+    /// Token sequences that mark an Intel-only build. "x86_64" and "x86-64" split into
+    /// ["x86", "64"], so that pair is listed alongside the unseparated "x8664".
+    private static let excludedArchitectureSequences: [[String]] = [["x86", "64"], ["x8664"], ["x64"], ["intel"]]
 
-    /// Strips separators so "x86_64", "x86-64", and "x8664" all normalize identically.
-    private static func normalize(_ name: String) -> String {
-        name.lowercased().replacingOccurrences(of: "_", with: "").replacingOccurrences(of: "-", with: "")
+    /// Splits a filename into lowercase alphanumeric tokens, so "MyApp-1.0-x86_64.zip"
+    /// becomes ["myapp", "1", "0", "x86", "64", "zip"].
+    private static func tokens(_ name: String) -> [String] {
+        name.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
     }
 
-    /// Filters to assets viable on Apple Silicon (arm64 or universal builds only), then
-    /// applies `matching` to pick one. Returns `nil` (never guesses) if nothing qualifies.
-    public static func select(from assets: [GitHubAsset], matching: AssetMatching, bundleName: String?) -> GitHubAsset? {
-        let archCandidates = assets.filter { asset in
-            let normalized = normalize(asset.name)
-            if excludedArchitectureTokens.contains(where: normalized.contains) { return false }
-            // If no architecture is named at all, accept it (single-architecture-per-repo releases are common).
-            let namesAnyArch = architectureTokens.contains(where: normalized.contains) || excludedArchitectureTokens.contains(where: normalized.contains)
-            if !namesAnyArch { return true }
-            return architectureTokens.contains(where: normalized.contains)
+    /// Matches whole tokens only, so "IntelliNote.zip" does not match "intel".
+    private static func namesExcludedArchitecture(_ name: String) -> Bool {
+        let parts = tokens(name)
+        return excludedArchitectureSequences.contains { sequence in
+            guard parts.count >= sequence.count else { return false }
+            return (0...(parts.count - sequence.count)).contains { start in
+                Array(parts[start..<(start + sequence.count)]) == sequence
+            }
         }
+    }
+
+    /// Excludes assets that name an Intel architecture, then applies `matching` to pick
+    /// one. Assets that name no architecture are kept, because single-architecture
+    /// releases often omit it. Returns `nil` if nothing qualifies.
+    public static func select(from assets: [GitHubAsset], matching: AssetMatching, bundleName: String?) -> GitHubAsset? {
+        let archCandidates = assets.filter { !namesExcludedArchitecture($0.name) }
         guard !archCandidates.isEmpty else { return nil }
 
         switch matching {
