@@ -2,7 +2,7 @@ project_name = "sunshine"
 
 [tasks]
 build = "swift build"
-example = "swift run --package-path Examples/SunshineExample SunshineExample"
+example = "cd Examples/SunshineExample && strudel run"
 test = "swift test"
 clean = "swift package clean"
 fmt = "swift format -i --recursive ."
