@@ -2,6 +2,10 @@
 
 Auto-update library for macOS apps distributed via GitHub Releases. Updates are verified using macOS code signing and notarization. Updates are installed only if they are signed by the same Developer ID Team as the current version.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="Sunshine update settings pane" width="420">
+</p>
+
 ## Requirements
 
 - macOS 13+
