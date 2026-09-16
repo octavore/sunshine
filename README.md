@@ -63,6 +63,26 @@ If this is omitted, Sunshine falls back to checking whether the new bundle's exe
 
 `SunshineUpdater`'s initializer calls this for you, so wiring it explicitly only matters if you construct the updater lazily rather than at launch.
 
+## System notifications
+
+Sunshine can post native macOS notifications (`UNUserNotificationCenter`) for three update lifecycle events. Each has its own `SunshineConfiguration` toggle, all defaulting to `true`:
+
+| Notification               | Toggle                     | Fires when                                                                                                                   |
+| -------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| "\<App\> updated"          | `notifyOnSuccessfulUpdate` | On the first launch after a successful relaunch                                                                              |
+| "\<App\> update available" | `notifyOnUpdateAvailable`  | A background check (`checkInterval` set) finds an update and `automationLevel` is `.manual`, so nothing downloads on its own |
+| "\<App\> update failed"    | `notifyOnUpdateFailure`    | An unattended download, verification, or install triggered by the background loop fails                                      |
+
+Each requests notification authorization on first use; if it was never granted, or the user declines, the notification is silently skipped. Only the background check loop triggers the "available" and "failed" notifications — a check or install the user triggers directly (e.g. "Check for Updates…") does not, since the UI is already on screen in that case.
+
+```swift
+SunshineConfiguration(
+    owner: "acme",
+    repo: "myapp",
+    notifyOnSuccessfulUpdate: false, // opt out of any of the three independently
+)
+```
+
 ## Usage: SwiftUI
 
 ```swift
@@ -222,16 +242,19 @@ let updater = SunshineUpdater(
 
 `SunshineConfiguration` fields (`owner`/`repo` required, the rest optional):
 
-| Field                 | Default                    | Purpose                                                                                                                  |
-| --------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `owner`, `repo`       | (required)                 | GitHub repository to check for releases                                                                                  |
-| `allowPrereleases`    | `false`                    | Consider releases marked "prerelease"                                                                                    |
-| `assetMatcher`        | `.zipOrDmgContainingApp()` | How to pick an asset from a release (see [Asset matching](#asset-matching))                                              |
-| `githubToken`         | `nil`                      | Raises the API rate limit from 60/hr to 5000/hr; recommended if checking more than hourly                                |
-| `checkInterval`       | `nil`                      | Seconds between automatic background checks; `nil` disables automatic checking                                           |
-| `installLocation`     | `nil`                      | Overrides the install path; defaults to `Bundle.main.bundleURL`                                                          |
-| `requireNotarization` | `true`                     | Also require a passing Gatekeeper/notarization check, not just a Team ID match                                           |
-| `automationLevel`     | `.manual`                  | `.manual` (prompt only), `.autoDownload` (auto-download, prompt to install), or `.autoDownloadAndInstall` (fully silent) |
+| Field                      | Default                    | Purpose                                                                                                                      |
+| -------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `owner`, `repo`            | (required)                 | GitHub repository to check for releases                                                                                      |
+| `allowPrereleases`         | `false`                    | Consider releases marked "prerelease"                                                                                        |
+| `assetMatcher`             | `.zipOrDmgContainingApp()` | How to pick an asset from a release (see [Asset matching](#asset-matching))                                                  |
+| `githubToken`              | `nil`                      | Raises the API rate limit from 60/hr to 5000/hr; recommended if checking more than hourly                                    |
+| `checkInterval`            | `nil`                      | Seconds between automatic background checks; `nil` disables automatic checking                                               |
+| `installLocation`          | `nil`                      | Overrides the install path; defaults to `Bundle.main.bundleURL`                                                              |
+| `requireNotarization`      | `true`                     | Also require a passing Gatekeeper/notarization check, not just a Team ID match                                               |
+| `automationLevel`          | `.manual`                  | `.manual` (prompt only), `.autoDownload` (auto-download, prompt to install), or `.autoDownloadAndInstall` (fully silent)     |
+| `notifyOnSuccessfulUpdate` | `true`                     | Post a system notification on the first launch after a successful update (see [System notifications](#system-notifications)) |
+| `notifyOnUpdateAvailable`  | `true`                     | Post a system notification when a background check finds an update under `.manual` automation                                |
+| `notifyOnUpdateFailure`    | `true`                     | Post a system notification when an unattended background install fails                                                       |
 
 ### Automatic checks
 
@@ -415,6 +438,8 @@ If the script itself dies mid-swap, the breadcrumb file lets the next `SunshineU
 ## Example app
 
 `Examples/SunshineExample` is a separate package containing a small SwiftUI app that showcases every view `SunshineUI` provides (`SunshineUpdateSettingsView`, `UpdateAvailableView`, `UpdateIndicatorView`, `UpdateErrorView`, and `DownloadProgressView`), picked from a sidebar. It runs against a fixed, in-memory list of releases via `StaticReleasesProvider`, so it never hits the network.
+
+The "Notifications" screen exercises all three [system notifications](#system-notifications): a button simulates a successful relaunch, and the Settings screen's automatic-check toggle exercises the "available" (manual automation) and "failed" (auto-download automation against the example's fake, 404ing asset URL) notifications. This screen requires running via `strudel run`, since `UNUserNotificationCenter` needs a real, signed `.app` bundle with a bundle identifier.
 
 Build and run it with [strudel](https://github.com/octavore/strudel) (configured in `Examples/SunshineExample/strudel.toml`):
 

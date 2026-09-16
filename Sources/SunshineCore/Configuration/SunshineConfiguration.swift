@@ -23,6 +23,17 @@ public struct SunshineConfiguration: Sendable {
   /// Require a passing Gatekeeper/notarization check in addition to a Team ID match.
   public var requireNotarization: Bool
   public var automationLevel: UpdateAutomationLevel
+  /// Post a system notification on the first launch after a successful update.
+  public var notifyOnSuccessfulUpdate: Bool
+  /// Post a system notification when a background check finds an update but
+  /// `automationLevel` is `.manual`, so it would otherwise sit unseen until the host
+  /// app is brought to the foreground. Has no effect on a check the host app triggers
+  /// itself, or when `checkInterval` is `nil`.
+  public var notifyOnUpdateAvailable: Bool
+  /// Post a system notification when an unattended download/verify/install, run by the
+  /// background check loop, fails. Has no effect on a failure from a foreground,
+  /// user-initiated action.
+  public var notifyOnUpdateFailure: Bool
 
   public init(
     owner: String,
@@ -33,7 +44,10 @@ public struct SunshineConfiguration: Sendable {
     checkInterval: TimeInterval? = nil,
     installLocation: URL? = nil,
     requireNotarization: Bool = true,
-    automationLevel: UpdateAutomationLevel = .manual
+    automationLevel: UpdateAutomationLevel = .manual,
+    notifyOnSuccessfulUpdate: Bool = true,
+    notifyOnUpdateAvailable: Bool = true,
+    notifyOnUpdateFailure: Bool = true
   ) {
     self.owner = owner
     self.repo = repo
@@ -44,5 +58,8 @@ public struct SunshineConfiguration: Sendable {
     self.installLocation = installLocation
     self.requireNotarization = requireNotarization
     self.automationLevel = automationLevel
+    self.notifyOnSuccessfulUpdate = notifyOnSuccessfulUpdate
+    self.notifyOnUpdateAvailable = notifyOnUpdateAvailable
+    self.notifyOnUpdateFailure = notifyOnUpdateFailure
   }
 }

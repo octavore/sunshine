@@ -92,7 +92,8 @@ public final class SunshineUpdater: ObservableObject {
     // Confirm a pending relaunch handshake automatically, so the host app does not
     // have to wire `confirmSuccessfulRelaunchIfNeeded()` itself. This is a no-op
     // unless the process was started by RelaunchCoordinator.
-    RelaunchCoordinator.confirmSuccessfulRelaunchIfNeeded(bundleIdentifier: bundleID)
+    RelaunchCoordinator.confirmSuccessfulRelaunchIfNeeded(
+      bundleIdentifier: bundleID, notifyOnSuccess: configuration.notifyOnSuccessfulUpdate)
 
     // Recovery must run before the sweep, which would otherwise be free to delete the
     // very aside bundle recovery needs to move back.
@@ -524,11 +525,27 @@ public final class SunshineUpdater: ObservableObject {
         guard !Task.isCancelled else { return }
         let result = await self.checkForUpdates()
         let automationLevel = self.configuration.automationLevel
-        if case .updateAvailable(let update) = result, automationLevel != .manual {
-          try? await self.downloadVerifyAndInstall(update, silently: false)
+        if case .updateAvailable(let update) = result {
+          if automationLevel == .manual {
+            if self.configuration.notifyOnUpdateAvailable {
+              UpdateNotifications.updateAvailable(releaseTag: update.id)
+            }
+          } else {
+            do {
+              try await self.downloadVerifyAndInstall(update, silently: false)
+            } catch {
+              if self.configuration.notifyOnUpdateFailure {
+                UpdateNotifications.updateFailed(message: Self.message(for: error))
+              }
+            }
+          }
         }
       }
     }
+  }
+
+  private static func message(for error: any Error) -> String {
+    (error as? SunshineError)?.description ?? error.localizedDescription
   }
 
   private func isSandboxed() -> Bool {

@@ -1,3 +1,4 @@
+import Foundation
 import Sunshine
 import SwiftUI
 
@@ -8,6 +9,7 @@ enum ExampleScreen: String, CaseIterable, Identifiable {
   case updateError = "Update Error"
   case downloadProgress = "Download Progress"
   case configuration = "Configuration"
+  case notifications = "Notifications"
 
   var id: String { rawValue }
 }
@@ -84,7 +86,74 @@ private struct UpdaterHost: View {
       ExampleConfigurationView(controller: controller, appliedReleaseConfig: releaseConfig) {
         releaseConfig = $0
       }
+    case .notifications:
+      NotificationsTestView()
     }
+  }
+}
+
+/// All three routes the package can exercise to a system notification. Every one of
+/// them requires a real, signed `.app` bundle with a bundle identifier for macOS to
+/// authorize and deliver the notification — run this app via `strudel run`, not
+/// `swift run`/`axo example`.
+private struct NotificationsTestView: View {
+  @State private var tag = "9.9.9-example"
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("1. Update Installed").font(.headline)
+        Text(
+          "Restarts this app with `--sunshine-relaunched-from=<tag>`, the same argument `RelaunchScript` passes for real once it has swapped the bundle. On the next launch, `SunshineUpdater.init` sees it and posts the notification (gated by `notifyOnSuccessfulUpdate`)."
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        TextField("Release tag", text: $tag)
+          .textFieldStyle(.roundedBorder)
+          .frame(maxWidth: 240)
+        Button("Simulate Update Relaunch") { simulateRelaunch(tag: tag) }
+      }
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("2. Update Available / 3. Update Failed").font(.headline)
+        Text(
+          "Both fire from the background check loop, not a foreground \"Check for Updates\" tap. On the Settings screen, turn on \"Automatically check for updates\":"
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        Text(
+          "• Automation level Manual → posts Update Available (gated by `notifyOnUpdateAvailable`), since nothing downloads on its own."
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        Text(
+          "• Automation level Auto-Download or Auto-Download-And-Install → the download hits this example's fake GitHub asset URL, which 404s, so it posts Update Failed (gated by `notifyOnUpdateFailure`)."
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        Text(
+          "The first background check runs almost immediately after the toggle is switched on, not after the full interval."
+        )
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+      }
+    }
+    .padding()
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  private func simulateRelaunch(tag: String) {
+    guard let executableURL = Bundle.main.executableURL else { return }
+    let process = Process()
+    process.executableURL = executableURL
+    process.arguments = ["--sunshine-relaunched-from=\(tag)"]
+    process.standardInput = FileHandle.nullDevice
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+    try? process.run()
+    exit(0)
   }
 }
 

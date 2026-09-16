@@ -33,7 +33,12 @@ enum RelaunchCoordinator {
   /// Call this once, as early as possible, when a host app starts up (both UI and
   /// headless integrations must wire this in `applicationDidFinishLaunching` or
   /// equivalent) so a pending relaunch handshake can be confirmed.
-  static func confirmSuccessfulRelaunchIfNeeded(bundleIdentifier: String) {
+  ///
+  /// - Parameter notifyOnSuccess: Mirrors `SunshineConfiguration.notifyOnSuccessfulUpdate`.
+  ///   When `false`, the handshake still completes but no system notification is posted.
+  static func confirmSuccessfulRelaunchIfNeeded(
+    bundleIdentifier: String, notifyOnSuccess: Bool = true
+  ) {
     guard
       let releaseTag = ProcessInfo.processInfo.arguments.first(where: {
         $0.hasPrefix(relaunchArgumentPrefix)
@@ -46,6 +51,9 @@ enum RelaunchCoordinator {
     try? FileManager.default.createDirectory(
       at: sentinel.deletingLastPathComponent(), withIntermediateDirectories: true)
     FileManager.default.createFile(atPath: sentinel.path, contents: Data())
+    if notifyOnSuccess {
+      UpdateNotifications.updateInstalled(releaseTag: tag)
+    }
   }
 
   /// Signals a spawned-but-still-waiting script to stand down, for a host whose
