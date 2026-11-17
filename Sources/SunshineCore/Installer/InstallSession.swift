@@ -20,6 +20,9 @@ struct InstallSession: Sendable {
   /// running and waiting; the caller is then expected to terminate the process. A throw
   /// means nothing was moved and the installed app is untouched.
   func install(_ verified: VerifiedUpdate, installURL: URL) async throws {
+    if let issue = InstallLocationChecker.issue(for: installURL) {
+      throw SunshineError.installLocationUnsuitable(installURL, issue)
+    }
     guard InstallLocationChecker.isWritable(installURL) else {
       throw SunshineError.installLocationNotWritable(installURL)
     }

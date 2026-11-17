@@ -9,6 +9,7 @@ public enum SunshineError: Error, Sendable {
   case extractionFailed(underlying: any Error)
   case verificationFailed(VerificationFailure)
   case installLocationNotWritable(URL)
+  case installLocationUnsuitable(URL, InstallLocationIssue)
   case sandboxedAppUnsupported
   case relaunchFailed(underlying: any Error)
   case cancelled
@@ -36,6 +37,12 @@ extension SunshineError: CustomStringConvertible {
       return "Update could not be verified: \(failure)"
     case .installLocationNotWritable(let url):
       return "Cannot update automatically: \(url.path) is not writable by the current user."
+    case .installLocationUnsuitable(_, .translocated):
+      return
+        "Cannot update automatically: the app is running from a temporary quarantine location. Move it to the Applications folder, then reopen it."
+    case .installLocationUnsuitable(_, .readOnlyVolume):
+      return
+        "Cannot update automatically: the app is running from a read-only volume such as a disk image. Move it to the Applications folder, then reopen it."
     case .sandboxedAppUnsupported:
       return "Sunshine does not support self-updating sandboxed applications."
     case .relaunchFailed(let underlying):

@@ -345,6 +345,7 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 | `.extractionFailed(underlying:)`           | The archive cannot be extracted or contains no top-level `.app` |
 | `.verificationFailed(VerificationFailure)` | Signature, Team ID, or notarization verification fails          |
 | `.installLocationNotWritable(URL)`         | The install location or its parent directory is not writable    |
+| `.installLocationUnsuitable(URL, issue)`   | The app runs from an App Translocation path or a read-only volume |
 | `.sandboxedAppUnsupported`                 | The app runs under App Sandbox                                  |
 | `.relaunchFailed(underlying:)`             | The relaunch script cannot be spawned                           |
 | `.cancelled`                               | A download is cancelled or a pending install is aborted         |
