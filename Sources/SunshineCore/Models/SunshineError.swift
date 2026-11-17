@@ -11,6 +11,7 @@ public enum SunshineError: Error, Sendable {
   case installLocationNotWritable(URL)
   case installLocationUnsuitable(URL, InstallLocationIssue)
   case sandboxedAppUnsupported
+  case moveToApplicationsFailed(underlying: any Error)
   case relaunchFailed(underlying: any Error)
   case cancelled
 }
@@ -45,6 +46,8 @@ extension SunshineError: CustomStringConvertible {
         "Cannot update automatically: the app is running from a read-only volume such as a disk image. Move it to the Applications folder, then reopen it."
     case .sandboxedAppUnsupported:
       return "Sunshine does not support self-updating sandboxed applications."
+    case .moveToApplicationsFailed(let underlying):
+      return "Could not move the app to the Applications folder: \(underlying.localizedDescription)"
     case .relaunchFailed(let underlying):
       return "Failed to relaunch the updated app: \(underlying.localizedDescription)"
     case .cancelled:

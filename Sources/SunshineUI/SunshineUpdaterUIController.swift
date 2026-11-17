@@ -111,6 +111,41 @@ public final class SunshineUpdaterUIController: ObservableObject {
     }
   }
 
+  private static let suppressMoveAlertKey = "SunshineSuppressMoveToApplicationsAlert"
+
+  /// Ask whether to move the app to the Applications folder, if it runs from a location
+  /// where it cannot update itself. Call this once at launch. Does nothing in a suitable
+  /// location, or after the user chose not to be asked again. On "Move", the app is
+  /// copied, relaunched from the copy, and terminated.
+  public func offerToMoveToApplicationsIfNeeded() {
+    guard updater.shouldOfferMoveToApplications,
+      !UserDefaults.standard.bool(forKey: Self.suppressMoveAlertKey)
+    else { return }
+
+    let alert = NSAlert()
+    alert.messageText = "Move to Applications folder?"
+    alert.informativeText =
+      "This app is running from a location where it cannot update itself. It can move itself to the Applications folder and relaunch."
+    alert.addButton(withTitle: "Move to Applications")
+    alert.addButton(withTitle: "Don't Move")
+    alert.showsSuppressionButton = true
+
+    let response = alert.runModal()
+    if alert.suppressionButton?.state == .on {
+      UserDefaults.standard.set(true, forKey: Self.suppressMoveAlertKey)
+    }
+    guard response == .alertFirstButtonReturn else { return }
+
+    do {
+      try updater.moveToApplicationsAndRelaunch()
+    } catch {
+      let failure = NSAlert()
+      failure.messageText = "Could not move the app"
+      failure.informativeText = "\(error)"
+      failure.runModal()
+    }
+  }
+
   public func checkForUpdatesButtonTapped() {
     Task {
       let result = await updater.checkForUpdates()

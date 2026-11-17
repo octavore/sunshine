@@ -499,6 +499,30 @@ public final class SunshineUpdater: ObservableObject {
     store.remindLater(update, for: interval)
   }
 
+  // MARK: - Moving to Applications
+
+  /// True if the app runs from a location where it cannot update itself: an App
+  /// Translocation path, a read-only volume, or any folder the user cannot write to.
+  public var shouldOfferMoveToApplications: Bool {
+    InstallLocationChecker.issue(for: installURL) != nil
+      || !InstallLocationChecker.isWritable(installURL)
+  }
+
+  /// Copies the app into `/Applications`, or `~/Applications` if that is not writable,
+  /// launches the copy, and terminates this process. A throw means the original app is
+  /// untouched and keeps running. The original bundle is left in place.
+  public func moveToApplicationsAndRelaunch() throws {
+    do {
+      let destination = try ApplicationMover.copy(appAt: installURL)
+      try ApplicationMover.launch(destination)
+    } catch {
+      let wrapped = SunshineError.moveToApplicationsFailed(underlying: error)
+      delegate?.updater(self, didFailWithError: wrapped)
+      throw wrapped
+    }
+    terminate()
+  }
+
   /// Must be called once, as early as possible in the host app's startup (e.g.
   /// `applicationDidFinishLaunching`), so a pending relaunch handshake from a previous
   /// install can be confirmed.

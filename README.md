@@ -67,6 +67,33 @@ If this is omitted, Sunshine falls back to checking whether the new bundle's exe
 
 `SunshineUpdater`'s initializer calls this for you, so wiring it explicitly only matters if you construct the updater lazily rather than at launch.
 
+## Moving to the Applications folder
+
+An app cannot update itself from a mounted disk image, a read-only volume, or an App Translocation path, which macOS uses for a quarantined app launched from outside the Applications folder. Sunshine can move the app to the Applications folder and relaunch it. This is opt-in, so call it at launch if you want it.
+
+With `SunshineUI`:
+
+```swift
+func applicationDidFinishLaunching(_ notification: Notification) {
+    controller.offerToMoveToApplicationsIfNeeded()
+}
+```
+
+This does nothing in a suitable location. Otherwise it shows an alert with "Move to Applications" and "Don't Move" buttons, and a checkbox to stop asking.
+
+Headless:
+
+```swift
+if updater.shouldOfferMoveToApplications {
+    // Ask the user in your own UI, then:
+    try updater.moveToApplicationsAndRelaunch()
+}
+```
+
+The app is copied to `/Applications`, or to `~/Applications` if that is not writable. An existing bundle with the same name is moved to the trash. Sunshine removes the quarantine attribute from the copy, launches it, and terminates the current process. The original bundle is left in place. If the move fails, the original keeps running and the call throws `SunshineError.moveToApplicationsFailed`.
+
+If the app does not move, `install()` throws `SunshineError.installLocationUnsuitable` instead of a generic permissions error.
+
 ## System notifications
 
 Sunshine can post native macOS notifications (`UNUserNotificationCenter`) for three update lifecycle events. Each has its own `SunshineConfiguration` toggle, all defaulting to `true`:
@@ -301,6 +328,8 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 | `verifiedUpdate: VerifiedUpdate?`                                          | The update most recently verified, for passing to `install(_:)` without downloading again                                                                                                                                                       |
 | `install(_:) async throws`                                                 | Stages the swap and terminates the process                                                                                                                                                                                                      |
 | `abortPendingInstall()`                                                    | Stands down a spawned relaunch script if termination was refused                                                                                                                                                                                |
+| `shouldOfferMoveToApplications`                                            | `true` if the app is translocated, on a read-only volume, or in an unwritable folder                                                                                                                                                            |
+| `moveToApplicationsAndRelaunch() throws`                                   | Copies the app to the Applications folder, launches the copy, and terminates the process                                                                                                                                                        |
 | `checkDownloadVerifyAndInstall(silently:) async throws`                    | Runs the whole pipeline                                                                                                                                                                                                                         |
 | `skip(_:)`, `remindLater(_:for:)`, `clearSkippedVersion()`                 | Records or clears a skip or deferral                                                                                                                                                                                                            |
 | `skippedVersion`, `isRemindingLater`, `remindLaterVersion`                 | Read-only skip and deferral state                                                                                                                                                                                                               |
@@ -335,20 +364,21 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 
 #### `SunshineError`
 
-| Case                                       | Raised when                                                     |
-| ------------------------------------------ | --------------------------------------------------------------- |
-| `.network(underlying:)`                    | A GitHub API request fails or returns a non-2xx status          |
-| `.invalidRepository(owner:repo:)`          | `owner` or `repo` cannot form a valid API URL                   |
-| `.rateLimited(resetAt:)`                   | The GitHub API rate limit is exhausted                          |
-| `.noMatchingAsset`                         | No asset passes the architecture filter and `assetMatcher`      |
-| `.downloadFailed(underlying:)`             | The asset download fails                                        |
-| `.extractionFailed(underlying:)`           | The archive cannot be extracted or contains no top-level `.app` |
-| `.verificationFailed(VerificationFailure)` | Signature, Team ID, or notarization verification fails          |
-| `.installLocationNotWritable(URL)`         | The install location or its parent directory is not writable    |
+| Case                                       | Raised when                                                       |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| `.network(underlying:)`                    | A GitHub API request fails or returns a non-2xx status            |
+| `.invalidRepository(owner:repo:)`          | `owner` or `repo` cannot form a valid API URL                     |
+| `.rateLimited(resetAt:)`                   | The GitHub API rate limit is exhausted                            |
+| `.noMatchingAsset`                         | No asset passes the architecture filter and `assetMatcher`        |
+| `.downloadFailed(underlying:)`             | The asset download fails                                          |
+| `.extractionFailed(underlying:)`           | The archive cannot be extracted or contains no top-level `.app`   |
+| `.verificationFailed(VerificationFailure)` | Signature, Team ID, or notarization verification fails            |
+| `.installLocationNotWritable(URL)`         | The install location or its parent directory is not writable      |
 | `.installLocationUnsuitable(URL, issue)`   | The app runs from an App Translocation path or a read-only volume |
-| `.sandboxedAppUnsupported`                 | The app runs under App Sandbox                                  |
-| `.relaunchFailed(underlying:)`             | The relaunch script cannot be spawned                           |
-| `.cancelled`                               | A download is cancelled or a pending install is aborted         |
+| `.sandboxedAppUnsupported`                 | The app runs under App Sandbox                                    |
+| `.moveToApplicationsFailed(underlying:)`   | Copying or launching the app in the Applications folder fails     |
+| `.relaunchFailed(underlying:)`             | The relaunch script cannot be spawned                             |
+| `.cancelled`                               | A download is cancelled or a pending install is aborted           |
 
 `VerificationFailure` cases: `.signatureInvalid(message:)`, `.teamIdentifierMismatch(expected:found:)`, `.teamIdentifierMissing`, `.notarizationRejected(reason:)`, `.runningAppUnsigned`. Both error types conform to `CustomStringConvertible` with user-readable descriptions.
 
@@ -384,6 +414,7 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 - `CodeSigningChecking`: protocol with `validateSignature(at:)`, `teamIdentifierOfRunningApp()`, and `isNotarized(at:)`, for substituting canned results in tests.
 - `SystemCodeSigningChecker`: the Security.framework and `spctl` implementation.
 - `InstallLocationChecker.isWritable(_:)` returns `true` if both the bundle and its parent directory are writable.
+- `InstallLocationChecker.issue(for:) -> InstallLocationIssue?` returns `.translocated` or `.readOnlyVolume`, or `nil` for an ordinary location.
 
 ### SunshineUI
 
@@ -401,6 +432,7 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 | `isInstalling`, `isDownloading`, `progress`, `statusText`          | Progress state from Install & Relaunch until the process exits                                            |
 | `updateUIStyle`                                                    | Set by `.sunshineUpdater(style:)`. The sheet opens automatically only for `.sheet`.                       |
 | `suppressesUpdateSheet`                                            | While `true`, found updates and errors populate state without opening the sheet                           |
+| `offerToMoveToApplicationsIfNeeded()`                              | Asks to move the app to the Applications folder if it cannot update itself where it is                    |
 | `checkForUpdatesButtonTapped()`                                    | Runs a check and shows the sheet or the "up to date" alert                                                |
 | `refreshUpdateStatus() async -> UpdateCheckResult`                 | Runs a check without presenting anything, and surfaces a skipped or deferred update as `pendingUpdate`    |
 | `viewSkippedUpdateTapped()`                                        | Clears the skip and shows `skippedUpdate` in the sheet                                                    |
@@ -436,7 +468,7 @@ That signal only applies while the app is alive. Once the process exits the scri
 
 Because the swap happens after this process exits, its outcome cannot be reported through `events` or the delegate. Only failures raised before the script is spawned surface as `.installFailed`. The script logs to `~/Library/Caches/<bundleIdentifier>/Sunshine/relaunch.log`.
 
-`install()` requires the install location to be writable by the current user. There is no privileged-helper fallback: if the location isn't writable, `install()` throws `SunshineError.installLocationNotWritable`. The built-in error view links to the release page for a manual download.
+`install()` requires the install location to be writable by the current user. There is no privileged-helper fallback: if the location isn't writable, `install()` throws `SunshineError.installLocationNotWritable`. If the app runs from a translocated path or a read-only volume, it throws `SunshineError.installLocationUnsuitable` instead (see [Moving to the Applications folder](#moving-to-the-applications-folder)). The built-in error view links to the release page for a manual download.
 
 If the script itself dies mid-swap, the breadcrumb file lets the next `SunshineUpdater` initialization restore the old bundle. Initialization also deletes old bundles left aside by an interrupted install once they are more than 24 hours old.
 
