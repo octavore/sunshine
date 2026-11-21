@@ -508,12 +508,24 @@ public final class SunshineUpdater: ObservableObject {
       || !InstallLocationChecker.isWritable(installURL)
   }
 
+  /// Existing bundle that `moveToApplicationsAndRelaunch()` would replace.
+  /// `nil` if the destination holds no bundle with this app's name.
+  public var existingCopyInApplications: URL? {
+    guard let destination = ApplicationMover.destination(for: installURL),
+      FileManager.default.fileExists(atPath: destination.path)
+    else { return nil }
+    return destination
+  }
+
   /// Copy the app into `/Applications`, or `~/Applications` if that is not writable.
-  /// Launch the copy and terminate this process. The original bundle is left in place. A
-  /// throw means the original app is unchanged and continues to run.
-  public func moveToApplicationsAndRelaunch() throws {
+  /// An existing bundle with the same name is moved to the trash. Instances running from it
+  /// are quit first. Launch the copy and terminate this process. The original bundle is left
+  /// in place. A throw means the original app is unchanged and continues to run.
+  /// - Parameter quitTimeout: Seconds to wait for running instances to quit before they are
+  ///   force terminated. Defaults to five. Pass `0` to force terminate immediately.
+  public func moveToApplicationsAndRelaunch(quitTimeout: TimeInterval = 5) throws {
     do {
-      let destination = try ApplicationMover.copy(appAt: installURL)
+      let destination = try ApplicationMover.copy(appAt: installURL, quitTimeout: quitTimeout)
       try ApplicationMover.launch(destination)
     } catch {
       let wrapped = SunshineError.moveToApplicationsFailed(underlying: error)

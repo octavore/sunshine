@@ -32,6 +32,28 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: app.path))
   }
 
+  @Test func replacesAnExistingBundle() throws {
+    let root = try makeRoot()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let app = try makeApp(in: root.appendingPathComponent("source"), marker: "new")
+    let target = root.appendingPathComponent("Applications", isDirectory: true)
+    let existing = try makeApp(in: target, marker: "old")
+
+    let copy = try ApplicationMover.copy(appAt: app, into: [target])
+
+    #expect(copy.path == existing.path)
+    let marker = try String(contentsOf: copy.appendingPathComponent("marker"), encoding: .utf8)
+    #expect(marker == "new")
+  }
+
+  @Test func runningInstancesExcludeTheCurrentProcess() {
+    let identifier = Bundle.main.bundleIdentifier
+    let url = Bundle.main.bundleURL
+    let instances = ApplicationMover.runningInstances(of: identifier, at: url)
+    let current = ProcessInfo.processInfo.processIdentifier
+    #expect(!instances.contains { $0.processIdentifier == current })
+  }
+
   @Test func skipsAnUnwritableDirectory() throws {
     let root = try makeRoot()
     defer {
