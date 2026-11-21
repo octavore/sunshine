@@ -123,33 +123,58 @@ public final class SunshineUpdaterUIController: ObservableObject {
   /// this once at launch. It does nothing in a suitable location, or after the user chose
   /// not to be asked again. On "Move", the app is copied, relaunched from the copy, and
   /// terminated.
-  public func offerToMoveToApplicationsIfNeeded() {
+  /// - Parameter allowsSuppression: Show a "Do not ask again" checkbox. If `false`, the alert
+  ///   has no checkbox and appears on every call, regardless of an earlier choice.
+  /// - Parameter confirmsReplacement: Ask before an existing copy in the Applications folder
+  ///   is trashed. If `false`, the copy is replaced without a second alert.
+  /// - Parameter quitTimeout: Seconds to wait for running instances of an existing copy to
+  ///   quit before they are force terminated.
+  /// - Parameter text: Titles, messages, and button labels of the alerts.
+  public func offerToMoveToApplicationsIfNeeded(
+    allowsSuppression: Bool = true, confirmsReplacement: Bool = true,
+    quitTimeout: TimeInterval = 5, text: MoveToApplicationsText = MoveToApplicationsText()
+  ) {
     guard updater.shouldOfferMoveToApplications,
-      !UserDefaults.standard.bool(forKey: Self.suppressMoveAlertKey)
+      !(allowsSuppression && UserDefaults.standard.bool(forKey: Self.suppressMoveAlertKey))
     else { return }
 
     let alert = NSAlert()
-    alert.messageText = "Move to Applications folder?"
-    alert.informativeText =
-      "This app is running from a location where it cannot update itself. It can move itself to the Applications folder and relaunch."
-    alert.addButton(withTitle: "Move to Applications")
-    alert.addButton(withTitle: "Don't Move")
-    alert.showsSuppressionButton = true
+    alert.messageText = text.offerTitle
+    alert.informativeText = text.offerMessage
+    alert.addButton(withTitle: text.moveButton)
+    alert.addButton(withTitle: text.dontMoveButton)
+    alert.showsSuppressionButton = allowsSuppression
 
     let response = alert.runModal()
-    if alert.suppressionButton?.state == .on {
+    if allowsSuppression, alert.suppressionButton?.state == .on {
       UserDefaults.standard.set(true, forKey: Self.suppressMoveAlertKey)
     }
-    guard response == .alertFirstButtonReturn else { return }
+    guard response == .alertFirstButtonReturn,
+      !confirmsReplacement || confirmReplacingExistingCopy(text: text)
+    else { return }
 
     do {
-      try updater.moveToApplicationsAndRelaunch()
+      try updater.moveToApplicationsAndRelaunch(quitTimeout: quitTimeout)
     } catch {
       let failure = NSAlert()
-      failure.messageText = "Could not move the app"
+      failure.messageText = text.failureTitle
       failure.informativeText = "\(error)"
       failure.runModal()
     }
+  }
+
+  /// Ask before an existing copy in the Applications folder is trashed.
+  /// Returns `true` if there is no existing copy or the user chose to replace it.
+  private func confirmReplacingExistingCopy(text: MoveToApplicationsText) -> Bool {
+    guard let existing = updater.existingCopyInApplications else { return true }
+    let name = existing.deletingPathExtension().lastPathComponent
+    let folder = existing.deletingLastPathComponent().lastPathComponent
+    let alert = NSAlert()
+    alert.messageText = text.replaceTitle(name, folder)
+    alert.informativeText = text.replaceMessage
+    alert.addButton(withTitle: text.replaceButton)
+    alert.addButton(withTitle: text.cancelReplaceButton)
+    return alert.runModal() == .alertFirstButtonReturn
   }
 
   public func checkForUpdatesButtonTapped() {
