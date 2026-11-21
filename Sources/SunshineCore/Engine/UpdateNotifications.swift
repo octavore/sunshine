@@ -1,10 +1,9 @@
 import Foundation
 import UserNotifications
 
-/// The system notifications this package can post for update lifecycle events. Each
-/// call requests authorization; if the host has never granted it, or declines, nothing
-/// is posted and the failure is silent, since a missed notification is not worth
-/// surfacing as an error of its own.
+/// System notifications for update lifecycle events.
+/// Each call requests authorization. If the user never granted it or declines, nothing is
+/// posted and no error is reported.
 enum UpdateNotifications {
   private static var appName: String {
     Bundle.main.infoDictionary?["CFBundleName"] as? String ?? "App"
@@ -22,23 +21,23 @@ enum UpdateNotifications {
     }
   }
 
-  /// Fired once, on the first launch after a successful relaunch.
+  /// Posted once, on the first launch after a successful relaunch.
   static func updateInstalled(releaseTag: String) {
     post(
       title: "\(appName) updated", body: "\(releaseTag) is installed.",
       identifier: "sunshine-update-installed-\(releaseTag)")
   }
 
-  /// Fired when a background check finds an update but `automationLevel` is `.manual`,
-  /// so nothing downloads until the host app is brought to the foreground.
+  /// Posted if a background check finds an update and `automationLevel` is `.manual`.
+  /// Nothing downloads until the user acts.
   static func updateAvailable(releaseTag: String) {
     post(
       title: "\(appName) update available", body: "\(releaseTag) is ready to download.",
       identifier: "sunshine-update-available-\(releaseTag)")
   }
 
-  /// Fired when an unattended download/verify/install (triggered by the background
-  /// check loop, not a foreground user action) fails.
+  /// Posted if an unattended download, verification, or install fails.
+  /// The background check loop starts these. Foreground user actions do not.
   static func updateFailed(message: String) {
     post(
       title: "\(appName) update failed", body: message,

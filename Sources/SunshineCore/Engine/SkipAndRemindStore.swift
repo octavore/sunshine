@@ -1,7 +1,7 @@
 import Foundation
 
-/// Persists per-user "skip this version" / "remind me later" decisions and the last
-/// successful/attempted check timestamps used for launch-time rate limiting and backoff.
+/// Persisted "skip this version" and "remind me later" decisions.
+/// Also stores the last check timestamp and backoff interval used for rate limiting.
 struct SkipAndRemindStore {
   private let defaults: UserDefaults
   private let keyPrefix: String
@@ -29,16 +29,17 @@ struct SkipAndRemindStore {
     defaults.removeObject(forKey: skippedVersionKey)
   }
 
-  /// Defers `update` specifically. The version is recorded alongside the deadline so a
-  /// release published during the deferral is still offered.
+  /// Defer `update` only.
+  /// The version is recorded with the deadline, so a release published during the deferral
+  /// is still offered.
   func remindLater(_ update: Update, for interval: TimeInterval) {
     defaults.set(Date().addingTimeInterval(interval), forKey: remindAfterKey)
     defaults.set(update.id, forKey: remindVersionKey)
   }
 
-  /// The deferred version, or `nil` if there is no deferral or it has elapsed. A
-  /// deadline written before the version was recorded also reads as `nil`, which
-  /// surfaces the update rather than hiding it.
+  /// Deferred version, or `nil` if there is no deferral or it has elapsed.
+  /// A deadline written before the version was recorded also reads as `nil`. The update
+  /// is then shown.
   func remindLaterVersion() -> String? {
     guard let date = defaults.object(forKey: remindAfterKey) as? Date, date > Date() else {
       return nil
@@ -46,12 +47,12 @@ struct SkipAndRemindStore {
     return defaults.string(forKey: remindVersionKey)
   }
 
-  /// Whether any deferral is currently active, regardless of which version it covers.
+  /// Whether a deferral is active for any version.
   func isRemindingLater() -> Bool {
     remindLaterVersion() != nil
   }
 
-  /// Whether `update` is the deferred version and its deferral has not yet elapsed.
+  /// Whether `update` is the deferred version and the deferral has not elapsed.
   func isRemindingLater(about update: Update) -> Bool {
     remindLaterVersion() == update.id
   }
@@ -76,8 +77,8 @@ struct SkipAndRemindStore {
     }
   }
 
-  /// The effective interval to wait before the next automatic check, accounting for
-  /// exponential backoff on repeated failures.
+  /// Interval to wait before the next automatic check.
+  /// Repeated failures apply exponential backoff.
   func nextCheckInterval(baseInterval: TimeInterval) -> TimeInterval {
     let backoff = defaults.double(forKey: backoffIntervalKey)
     return backoff > 0 ? backoff : baseInterval

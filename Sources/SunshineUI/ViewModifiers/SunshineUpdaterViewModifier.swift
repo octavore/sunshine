@@ -9,8 +9,8 @@ private struct SunshineUpdaterModifier: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      // Set synchronously on appear rather than from a `task`, so the style is in
-      // place before a check that completes early can raise a sheet.
+      // Set the style synchronously on appear and not from a `task`. The style is then
+      // in place before an early check can present a sheet.
       .onAppear { controller.updateUIStyle = style }
       .sheet(isPresented: $controller.isPresentingUpdateSheet) {
         if let message = controller.errorMessage {
@@ -45,10 +45,10 @@ private struct SunshineUpdaterModifier: ViewModifier {
       }
   }
 
-  /// "\(appName) \(version) is the latest version.", with the name and version linking out
-  /// to the GitHub release page when one is known. Building this as an `AttributedString`
-  /// (rather than interpolating into a Markdown string) avoids `appName` breaking parsing
-  /// if it contains Markdown-special characters.
+  /// Message "\(appName) \(version) is the latest version."
+  /// The name and version link to the GitHub release page if it is known. The message is an
+  /// `AttributedString` and not an interpolated Markdown string. An `appName` with
+  /// Markdown characters then does not break parsing.
   private func upToDateMessage(appName: String, releaseURL: URL?) -> AttributedString {
     var linkRun = AttributedString("\(appName) \(AppVersion.fromMainBundle().shortVersion)")
     if let releaseURL {
@@ -59,15 +59,15 @@ private struct SunshineUpdaterModifier: ViewModifier {
 }
 
 extension View {
-  /// Attaches Sunshine's ready-made update UI. This is the minimal-setup integration
-  /// path: attach it once, near the root of your scene. The background check loop is
-  /// started by `SunshineUpdater` itself when `checkInterval` is configured, so it runs
-  /// whether or not this modifier is attached.
+  /// Attach the ready-made Sunshine update UI.
+  /// This is the minimal setup. Attach it once, near the root of your scene.
+  /// `SunshineUpdater` starts the background check loop itself if `checkInterval` is
+  /// configured, so the loop runs with or without this modifier.
   ///
-  /// - Parameter style: `.sheet` (default) interrupts with a modal as soon as an update
-  ///   is found. `.cornerIndicator` instead shows a small badge in the bottom-trailing
-  ///   corner that the user opens when ready. See
-  ///   https://mitchellh.com/writing/non-trivial-vibing for the design this mirrors.
+  /// - Parameter style: `.sheet` (default) shows a modal as soon as an update is found.
+  ///   `.cornerIndicator` shows a small badge in the bottom-trailing corner that the user
+  ///   opens when ready. The design follows
+  ///   https://mitchellh.com/writing/non-trivial-vibing.
   public func sunshineUpdater(
     _ controller: SunshineUpdaterUIController,
     appName: String = (Bundle.main.infoDictionary?["CFBundleName"] as? String) ?? "This app",

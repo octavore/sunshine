@@ -4,8 +4,8 @@ import Testing
 @testable import SunshineCore
 
 @Suite struct SkipAndRemindStoreTests {
-  /// A store backed by its own throwaway defaults domain, so tests never touch the
-  /// user's real preferences or each other's.
+  /// Store backed by its own temporary defaults domain.
+  /// Tests do not touch the user's preferences or each other's.
   private func makeStore() -> (SkipAndRemindStore, UserDefaults, String) {
     let suiteName = "com.sunshine.tests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
@@ -30,7 +30,7 @@ import Testing
     store.remindLater(update(tag: "2.0.0"), for: 3600)
 
     #expect(store.isRemindingLater(about: update(tag: "2.0.0")))
-    // A release published during the deferral is a different version, so it is offered.
+    // A release published during the deferral is a different version. It is offered.
     #expect(!store.isRemindingLater(about: update(tag: "2.1.0")))
     #expect(store.isRemindingLater())
     #expect(store.remindLaterVersion() == "2.0.0")
@@ -56,7 +56,7 @@ import Testing
 
     #expect(!store.isRemindingLater())
     #expect(store.remindLaterVersion() == nil)
-    // A second deferral after a clear still works.
+    // A second deferral after a clear is active.
     store.remindLater(update(tag: "2.1.0"), for: 3600)
     #expect(store.isRemindingLater(about: update(tag: "2.1.0")))
   }
@@ -65,7 +65,7 @@ import Testing
     let (store, defaults, suite) = makeStore()
     defer { defaults.removePersistentDomain(forName: suite) }
 
-    // What a deferral written by an older version of Sunshine looks like on disk.
+    // Deferral as an older version of Sunshine wrote it to disk.
     defaults.set(Date().addingTimeInterval(3600), forKey: "com.sunshine.test.app.remindAfter")
 
     #expect(!store.isRemindingLater())
@@ -94,7 +94,7 @@ import Testing
     store.recordCheckAttempt(succeeded: false, baseInterval: 100)
     #expect(store.nextCheckInterval(baseInterval: 100) == 200)
 
-    // The backoff is capped at 16x the base interval.
+    // Backoff is capped at 16 times the base interval.
     for _ in 0..<10 {
       store.recordCheckAttempt(succeeded: false, baseInterval: 100)
     }

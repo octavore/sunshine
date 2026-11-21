@@ -1,22 +1,23 @@
 import Foundation
 import Sunshine
 
-/// The example app's owner/repo, matching `ExampleData.updater`'s configuration. It is used to
-/// derive the same `UserDefaults` key prefix `SunshineUpdater` persists its state under.
+/// Owner and repo of the example app, matching the `ExampleData.updater` configuration.
+/// They derive the `UserDefaults` key prefix that `SunshineUpdater` uses to persist state.
 let exampleOwner = "example"
 let exampleRepo = "example"
 
-/// Adjustable knobs for the "latest" release the example app's `Configuration` screen lets
-/// you tweak, so you can see how `UpdateIndicatorView` etc. react to different release shapes.
+/// Adjustable settings of the "latest" release on the `Configuration` screen of the example
+/// app.
+/// They show how `UpdateIndicatorView` and other views react to different releases.
 struct ExampleReleaseConfig: Hashable {
   var latestVersion: String = "2.1.0"
   var includeReleaseNotes: Bool = true
   var isPrerelease: Bool = false
-  /// Makes every release fetch fail, so the error state can be shown.
+  /// Make every release fetch fail, so the error state can be shown.
   var simulatesError: Bool = false
 }
 
-/// A `ReleasesProviding` conformer whose fetches always fail.
+/// `ReleasesProviding` conformer whose fetches always fail.
 struct FailingReleasesProvider: ReleasesProviding {
   /// Timeout error with the description `URLSession` attaches to real ones.
   private static let timeout = URLError(
@@ -31,10 +32,11 @@ struct FailingReleasesProvider: ReleasesProviding {
   }
 }
 
-/// Sample release data and network-free updaters for the example app's view gallery.
+/// Sample release data and updaters without network access, for the view gallery of the
+/// example app.
 enum ExampleData {
-  /// The `UserDefaults` key prefix `SkipAndRemindStore`/`UpdatePreferencesStore` persist
-  /// this app's updater state under.
+  /// `UserDefaults` key prefix that `SkipAndRemindStore` and `UpdatePreferencesStore` use
+  /// to persist the updater state of this app.
   static var userDefaultsKeyPrefix: String {
     let bundleID = Bundle.main.bundleIdentifier ?? "\(exampleOwner).\(exampleRepo)"
     return "com.sunshine.\(bundleID)."
@@ -80,7 +82,7 @@ enum ExampleData {
     release(tag: "1.9.0", daysAgo: 90),
   ]
 
-  /// The fixed release list, with the latest entry replaced by `config`'s settings.
+  /// Fixed release list with the latest entry replaced by the settings in `config`.
   static func releases(for config: ExampleReleaseConfig) -> [GitHubRelease] {
     [
       release(
@@ -90,8 +92,8 @@ enum ExampleData {
       + releases.dropFirst()
   }
 
-  /// A `SunshineUpdater` backed by `StaticReleasesProvider` with no network access, so the
-  /// example app always shows the same fixed release data.
+  /// `SunshineUpdater` backed by `StaticReleasesProvider`, without network access.
+  /// The example app always shows the same fixed release data.
   @MainActor
   static func updater(config: ExampleReleaseConfig = ExampleReleaseConfig()) -> SunshineUpdater {
     let provider: any ReleasesProviding =

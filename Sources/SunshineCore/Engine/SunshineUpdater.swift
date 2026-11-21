@@ -1,23 +1,24 @@
 import Combine
 import Foundation
 
-/// The core update engine: checks GitHub Releases, downloads, verifies against the
-/// running app's code signature, and swaps the new bundle into place. Usable headlessly
-/// (no UI import) or driven by `SunshineUI`'s `SunshineUpdaterUIController`.
+/// Core update engine.
+/// It checks GitHub Releases, downloads, verifies against the running app's code signature,
+/// and swaps the new bundle into place. It works headlessly or through `SunshineUI`'s
+/// `SunshineUpdaterUIController`.
 @MainActor
 public final class SunshineUpdater: ObservableObject {
   @Published public private(set) var state: UpdateState = .idle
 
   public weak var delegate: (any SunshineUpdaterDelegate)?
 
-  /// How the host process ends itself once the relaunch script is waiting. The default
-  /// suits headless callers; `SunshineUI` replaces it with `NSApp.terminate(nil)` so the
-  /// app delegate, autosave, and unsaved-changes prompts all run first.
+  /// Action that ends the host process once the relaunch script is waiting.
+  /// The default suits headless callers. `SunshineUI` replaces it with `NSApp.terminate(nil)`,
+  /// so the app delegate, autosave, and unsaved-changes prompts run first.
   public var terminate: @MainActor () -> Void = { exit(0) }
 
-  /// How long to wait after `terminate()` before assuming termination was refused (an
-  /// app delegate returning `.terminateCancel`, an unsaved-changes sheet the user
-  /// dismisses) and standing the script down.
+  /// Wait after `terminate()` before termination is assumed refused and the script is
+  /// stood down. Refusal includes an app delegate returning `.terminateCancel` and a user
+  /// dismissing an unsaved-changes sheet.
   var terminationGracePeriod: TimeInterval = 20
 
   private var configuration: SunshineConfiguration
@@ -30,24 +31,22 @@ public final class SunshineUpdater: ObservableObject {
 
   private let eventContinuation: AsyncStream<UpdateEvent>.Continuation
 
-  /// Progress events, for a caller that prefers a stream to ``SunshineUpdaterDelegate``.
+  /// Progress events, as an alternative to ``SunshineUpdaterDelegate``.
   ///
-  /// This is a **single-consumer** stream. It is one `AsyncStream` shared by everyone who
-  /// reads this property, not a broadcast: a second `for await` loop over it does not get
-  /// its own copy, it competes with the first, and each event is delivered to whichever
-  /// loop happens to be waiting. Iterate it from exactly one place, and use the delegate
-  /// if more than one part of the app needs to observe.
+  /// This stream has a single consumer. It is one `AsyncStream` shared by every reader of
+  /// this property. It is not a broadcast. A second `for await` loop competes with the
+  /// first, and each event goes to whichever loop is waiting. Iterate it from exactly one
+  /// place. Use the delegate if more than one part of the app needs to observe.
   ///
-  /// The stream is live from `init`, so events emitted before anything starts iterating
-  /// are buffered rather than dropped. The buffer keeps the newest
-  /// ``eventBufferSize`` events: a consumer that stops iterating without breaking the
-  /// loop cannot grow it without bound, but it will miss the oldest events it skipped.
+  /// The stream starts at `init`, so events emitted before anything starts iterating are
+  /// buffered. The buffer holds the newest ``eventBufferSize`` events. A consumer that
+  /// stops iterating cannot grow the buffer without bound, but it misses the oldest events.
   public let events: AsyncStream<UpdateEvent>
 
-  /// How many unconsumed events the stream holds before it starts discarding the oldest.
+  /// Number of unconsumed events the stream holds before it discards the oldest.
   public static let eventBufferSize = 256
 
-  /// The update most recently verified by ``verify(_:)``, or `nil` if none has been.
+  /// Update most recently verified by ``verify(_:)``, or `nil` if none has been.
   /// Pass it to ``install(_:)`` to install without downloading again.
   public private(set) var verifiedUpdate: VerifiedUpdate?
 
@@ -55,14 +54,14 @@ public final class SunshineUpdater: ObservableObject {
   private var downloadTask: Task<(URL, URLResponse), any Error>?
 
   /// - Parameter releasesProvider: Source of release data. Defaults to a real
-  ///   `GitHubReleasesClient`; pass a `StaticReleasesProvider` to drive this updater from a
-  ///   fixed list of releases instead, e.g. for SwiftUI previews, examples, or tests.
+  ///   `GitHubReleasesClient`. Pass a `StaticReleasesProvider` to use a fixed list of
+  ///   releases, e.g. for SwiftUI previews, examples, or tests.
   public init(
     configuration: SunshineConfiguration, releasesProvider: (any ReleasesProviding)? = nil
   ) {
-    // Built here rather than lazily on first read, so an event emitted before the host
-    // subscribes is buffered instead of dropped. The background check loop starts in
-    // this initializer, so that window is real.
+    // Create the stream here instead of lazily on first read. Events emitted before the
+    // host subscribes are then buffered. The background check loop starts in this
+    // initializer, so such events are possible.
     var continuation: AsyncStream<UpdateEvent>.Continuation!
     self.events = AsyncStream(bufferingPolicy: .bufferingNewest(Self.eventBufferSize)) {
       continuation = $0
@@ -89,14 +88,14 @@ public final class SunshineUpdater: ObservableObject {
       self.configuration.allowPrereleases = savedPrereleases
     }
 
-    // Confirm a pending relaunch handshake automatically, so the host app does not
-    // have to wire `confirmSuccessfulRelaunchIfNeeded()` itself. This is a no-op
-    // unless the process was started by RelaunchCoordinator.
+    // Confirm a pending relaunch handshake. The host app does not need to call
+    // `confirmSuccessfulRelaunchIfNeeded()` itself. This does nothing unless
+    // RelaunchCoordinator started the process.
     RelaunchCoordinator.confirmSuccessfulRelaunchIfNeeded(
       bundleIdentifier: bundleID, notifyOnSuccess: configuration.notifyOnSuccessfulUpdate)
 
-    // Recovery must run before the sweep, which would otherwise be free to delete the
-    // very aside bundle recovery needs to move back.
+    // Recovery must run before the sweep. The sweep can delete the aside bundle that
+    // recovery needs to move back.
     InstallSession.recoverInterruptedInstall(bundleIdentifier: bundleID)
     InstallSession.sweepStaleAsideBundles(near: installURL)
 
@@ -107,8 +106,8 @@ public final class SunshineUpdater: ObservableObject {
 
   // MARK: - Live settings (for `SunshineUpdateSettingsView`)
 
-  /// Whether the background check loop is running. Setting this persists the preference
-  /// and starts/stops the loop immediately.
+  /// Whether the background check loop is running.
+  /// Setting this persists the preference and starts or stops the loop immediately.
   public var isAutomaticallyCheckingForUpdates: Bool {
     get { configuration.checkInterval != nil }
     set {
@@ -125,8 +124,8 @@ public final class SunshineUpdater: ObservableObject {
     }
   }
 
-  /// Whether a found update should download, verify, and install unattended. Persists
-  /// the preference immediately.
+  /// Whether a found update downloads, verifies, and installs unattended.
+  /// Setting this persists the preference immediately.
   public var automationLevel: UpdateAutomationLevel {
     get { configuration.automationLevel }
     set {
@@ -136,8 +135,8 @@ public final class SunshineUpdater: ObservableObject {
     }
   }
 
-  /// Whether prerelease GitHub releases are eligible updates. Persists the preference
-  /// immediately.
+  /// Whether prerelease GitHub releases are eligible updates.
+  /// Setting this persists the preference immediately.
   public var allowPrereleases: Bool {
     get { configuration.allowPrereleases }
     set {
@@ -147,25 +146,26 @@ public final class SunshineUpdater: ObservableObject {
     }
   }
 
-  /// When the most recent check (successful or not) ran, for display in settings UI.
+  /// Time of the most recent check, successful or not.
   public var lastCheckDate: Date? { store.lastCheckDate() }
 
-  /// The repository's GitHub releases page, for linking out from settings UI.
+  /// GitHub releases page of the repository.
   public var releasesPageURL: URL? {
     URL(string: "https://github.com/\(configuration.owner)/\(configuration.repo)/releases")
   }
 
-  /// The release tag the user chose to skip via ``skip(_:)``, or `nil` if none.
-  /// A check treats this version as "up to date"; ``clearSkippedVersion()`` undoes it.
+  /// Release tag the user skipped via ``skip(_:)``, or `nil` if none.
+  /// A check treats this version as "up to date". ``clearSkippedVersion()`` reverses it.
   public var skippedVersion: String? { store.skippedVersion() }
 
-  /// Whether a "remind me later" deferral is currently active. Only the deferred
-  /// version is suppressed; a newer release published during the deferral is still
-  /// offered. Cleared by ``clearSkippedVersion()`` or when the interval elapses.
+  /// Whether a "remind me later" deferral is active.
+  /// Only the deferred version is suppressed. A newer release published during the
+  /// deferral is still offered. ``clearSkippedVersion()`` or the end of the interval
+  /// clears the deferral.
   public var isRemindingLater: Bool { store.isRemindingLater() }
 
-  /// The release tag the user deferred via ``remindLater(_:for:)``, or `nil` if there
-  /// is no active deferral.
+  /// Release tag the user deferred via ``remindLater(_:for:)``, or `nil` if there is no
+  /// active deferral.
   public var remindLaterVersion: String? { store.remindLaterVersion() }
 
   // MARK: - Headless / programmatic API
@@ -259,13 +259,12 @@ public final class SunshineUpdater: ObservableObject {
     }
   }
 
-  /// Combines the release notes of every release newer than `runningVersion` (not just
-  /// the latest), newest first, so a user who skipped several versions sees them all.
+  /// Combine release notes of every release newer than `runningVersion`, newest first.
+  /// A user who skipped several versions sees all of them.
   ///
-  /// The stable path checks a single release, so the intermediate ones are fetched here
-  /// rather than up front, and only once an update has actually been found: a check that
-  /// finds nothing still costs one API call. A failed fetch falls back to the update's
-  /// own notes rather than failing the check.
+  /// The stable path checks a single release. Intermediate releases are fetched here, and
+  /// only after an update is found. A check that finds nothing costs one API call. A failed
+  /// fetch falls back to the update's own notes and does not fail the check.
   private func aggregatingReleaseNotes(
     for update: Update, knownReleases: [GitHubRelease], runningVersion: AppVersion
   ) async -> Update {
@@ -299,8 +298,8 @@ public final class SunshineUpdater: ObservableObject {
     let tempDirectory = SunshineCache.updateDirectory(
       forBundleIdentifier: bundleIdentifier, releaseTag: update.id)
     try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
-    // The asset name comes from the API response, so it is sanitized before it becomes
-    // a filename. The extension survives, which is what the extractor dispatches on.
+    // Sanitize the asset name from the API response before using it as a filename.
+    // The extension is preserved. The extractor selects its method by extension.
     let archiveURL = tempDirectory.appendingPathComponent(
       SunshineCache.safeComponent(update.asset.name))
 
@@ -317,8 +316,7 @@ public final class SunshineUpdater: ObservableObject {
         }
       }
       let request = URLRequest(url: update.asset.browserDownloadURL)
-      // Held so `cancelDownload()` has something to cancel. Cancelling the task
-      // cancels the underlying URLSession transfer.
+      // Stored for `cancelDownload()`. Cancelling the task cancels the URLSession transfer.
       let task = Task {
         try await URLSession.shared.download(for: request, delegate: progressDelegate)
       }
@@ -331,8 +329,8 @@ public final class SunshineUpdater: ObservableObject {
       }
       try FileManager.default.moveItem(at: downloadedURL, to: archiveURL)
     } catch {
-      // A user-initiated cancel returns to the review rather than reporting a
-      // failure: nothing went wrong, and the update is still available.
+      // A user-initiated cancel returns to the review and is not reported as a failure.
+      // The update is still available.
       guard !Self.isCancellation(error) else {
         state = .updateAvailable(update)
         throw SunshineError.cancelled
@@ -350,20 +348,22 @@ public final class SunshineUpdater: ObservableObject {
     return DownloadedUpdate(update: update, archiveURL: archiveURL, tempDirectory: tempDirectory)
   }
 
-  /// Whether a download is in flight and can still be cancelled. Verification and
-  /// install are not cancellable: both are short, and abandoning a swap partway is
-  /// worse than finishing it.
+  /// Whether a download is in flight and can be cancelled.
+  /// Verification and install are not cancellable. Both are short, and abandoning a swap
+  /// partway is worse than finishing it.
   public var isDownloadCancellable: Bool { downloadTask != nil }
 
-  /// Cancels an in-flight download. ``download(_:)`` then throws
-  /// ``SunshineError/cancelled`` and the state returns to `.updateAvailable`, so the
-  /// user can start it again. Does nothing if no download is running.
+  /// Cancel an in-flight download.
+  /// ``download(_:)`` then throws ``SunshineError/cancelled`` and the state returns to
+  /// `.updateAvailable`, so the user can start it again. Does nothing if no download is
+  /// running.
   public func cancelDownload() {
     downloadTask?.cancel()
   }
 
-  /// URLSession surfaces a cancelled transfer as `URLError.cancelled`, while cancelling
-  /// before the request starts throws `CancellationError`.
+  /// Whether `error` is a cancellation.
+  /// URLSession reports a cancelled transfer as `URLError.cancelled`. Cancelling before the
+  /// request starts throws `CancellationError`.
   private static func isCancellation(_ error: any Error) -> Bool {
     if error is CancellationError { return true }
     if let urlError = error as? URLError, urlError.code == .cancelled { return true }
@@ -375,8 +375,8 @@ public final class SunshineUpdater: ObservableObject {
     emit(.verificationStarted)
     let verifier = self.verifier
     do {
-      // Extraction (`ditto`/`hdiutil`) and verification (`codesign`/`spctl`) shell
-      // out and block for seconds, so they run off the main actor to keep the UI responsive.
+      // Extraction (`ditto`/`hdiutil`) and verification (`codesign`/`spctl`) run external
+      // tools and block for seconds. They run off the main actor so the UI stays responsive.
       let (appURL, report) = try await Task.detached(priority: .userInitiated) {
         let extractedDirectory = downloaded.tempDirectory.appendingPathComponent(
           "extracted", isDirectory: true)
@@ -404,21 +404,20 @@ public final class SunshineUpdater: ObservableObject {
     }
   }
 
-  /// Stages the update and hands the swap to a detached script, then terminates this
-  /// process so the script can proceed. On success this does not return meaningfully;
-  /// the process is expected to be gone. A throw means nothing was moved.
+  /// Stage the update, hand the swap to a detached script, and terminate this process.
+  /// On success the process is expected to be gone. A throw means nothing was moved.
   ///
-  /// Because the swap, relaunch, and any rollback happen after this process exits, their
-  /// outcome cannot be reported back through `events`; only failures raised before the
-  /// script is spawned produce `.installFailed`.
+  /// The swap, relaunch, and any rollback happen after this process exits. Their outcome
+  /// is not reported through `events`. Only failures raised before the script is spawned
+  /// produce `.installFailed`.
   public func install(_ verified: VerifiedUpdate) async throws {
     state = .installing
     emit(.installStarted)
     let session = InstallSession(bundleIdentifier: bundleIdentifier, verifier: verifier)
     let installURL = self.installURL
     do {
-      // Re-verification shells out to `codesign`/`spctl` and blocks for seconds;
-      // keep it off the main actor so the sheet can show its "installing" state.
+      // Re-verification runs `codesign` and `spctl` and blocks for seconds. It runs off the
+      // main actor so the sheet can show its "installing" state.
       try await Task.detached(priority: .userInitiated) {
         try await session.install(verified, installURL: installURL)
       }.value
@@ -439,23 +438,23 @@ public final class SunshineUpdater: ObservableObject {
     terminate()
 
     // Reached only if termination was refused. The script is still waiting on this
-    // process, so stand it down rather than let it swap the bundle out from under a
-    // live app whenever this process eventually does exit.
+    // process. Stand it down so it does not swap the bundle under a live app if this
+    // process exits later.
     Task { [terminationGracePeriod] in
       try? await Task.sleep(nanoseconds: UInt64(terminationGracePeriod * 1_000_000_000))
       self.abortPendingInstall()
     }
   }
 
-  /// Cancels an install whose script has already been spawned but has not yet acted,
-  /// leaving the current bundle in place. Call this if the app declines to terminate
-  /// (e.g. `applicationShouldTerminate` returns `.terminateCancel`) after `install()`.
-  /// `install()` also does this automatically once its grace period elapses.
+  /// Cancel an install whose script is spawned but has not acted yet.
+  /// The current bundle stays in place. Call this if the app declines to terminate after
+  /// `install()`, e.g. `applicationShouldTerminate` returns `.terminateCancel`.
+  /// `install()` also calls this after its grace period elapses.
   ///
-  /// This only takes effect while this process is alive: the script ignores the signal
-  /// once the host exits, so a cancelled-then-completed termination still updates. The
-  /// script owns the breadcrumb file for the same reason, and it is deliberately left
-  /// in place here.
+  /// This takes effect only while this process is alive. The script ignores the signal
+  /// once the host exits, so a termination that is cancelled and later completed still
+  /// updates. The script owns the breadcrumb file for the same reason, so this does not
+  /// remove it.
   public func abortPendingInstall() {
     RelaunchCoordinator.abortPendingInstall(bundleIdentifier: bundleIdentifier)
     if case .installing = state {
@@ -464,16 +463,16 @@ public final class SunshineUpdater: ObservableObject {
     }
   }
 
-  /// End-to-end convenience path. `silently` skips the `.readyToInstall` pause for a
-  /// single manually-triggered call. It does not change the persistent
-  /// `automationLevel` preference used by the scheduled background-check loop.
+  /// Check, download, verify, and install in one call.
+  /// `silently` skips the `.readyToInstall` pause for this call only. It does not change
+  /// the `automationLevel` preference used by the background check loop.
   public func checkDownloadVerifyAndInstall(silently: Bool) async throws {
     let result = await checkForUpdates()
     guard case .updateAvailable(let update) = result else { return }
     try await downloadVerifyAndInstall(update, silently: silently)
   }
 
-  /// Downloads and verifies `update`, then installs it if `silently` is set or
+  /// Download and verify `update`, then install it if `silently` is set or
   /// `automationLevel` is `.autoDownloadAndInstall`.
   private func downloadVerifyAndInstall(_ update: Update, silently: Bool) async throws {
     let downloaded = try await download(update)
@@ -487,9 +486,9 @@ public final class SunshineUpdater: ObservableObject {
     store.skip(update)
   }
 
-  /// Clears a previously skipped version and any active "remind me later" timer, so the
-  /// update becomes eligible again on the next check (e.g. when the user chooses to view
-  /// an update they'd earlier skipped or deferred).
+  /// Clear a skipped version and any active "remind me later" timer.
+  /// The update is eligible again on the next check, e.g. if the user chooses to view an
+  /// update they skipped or deferred.
   public func clearSkippedVersion() {
     store.clearSkip()
     store.clearRemindLater()
@@ -501,16 +500,17 @@ public final class SunshineUpdater: ObservableObject {
 
   // MARK: - Moving to Applications
 
-  /// True if the app runs from a location where it cannot update itself: an App
-  /// Translocation path, a read-only volume, or any folder the user cannot write to.
+  /// Whether the app runs from a location where it cannot update itself.
+  /// Such locations include an App Translocation path, a read-only volume, and any folder
+  /// the user cannot write to.
   public var shouldOfferMoveToApplications: Bool {
     InstallLocationChecker.issue(for: installURL) != nil
       || !InstallLocationChecker.isWritable(installURL)
   }
 
-  /// Copies the app into `/Applications`, or `~/Applications` if that is not writable,
-  /// launches the copy, and terminates this process. A throw means the original app is
-  /// untouched and keeps running. The original bundle is left in place.
+  /// Copy the app into `/Applications`, or `~/Applications` if that is not writable.
+  /// Launch the copy and terminate this process. The original bundle is left in place. A
+  /// throw means the original app is unchanged and continues to run.
   public func moveToApplicationsAndRelaunch() throws {
     do {
       let destination = try ApplicationMover.copy(appAt: installURL)
@@ -523,9 +523,9 @@ public final class SunshineUpdater: ObservableObject {
     terminate()
   }
 
-  /// Must be called once, as early as possible in the host app's startup (e.g.
-  /// `applicationDidFinishLaunching`), so a pending relaunch handshake from a previous
-  /// install can be confirmed.
+  /// Confirm a pending relaunch handshake from a previous install.
+  /// Call this once, as early as possible in host app startup, e.g. in
+  /// `applicationDidFinishLaunching`.
   public static func confirmSuccessfulRelaunchIfNeeded() {
     let bundleID = Bundle.main.bundleIdentifier ?? "unknown"
     RelaunchCoordinator.confirmSuccessfulRelaunchIfNeeded(bundleIdentifier: bundleID)
@@ -576,7 +576,7 @@ public final class SunshineUpdater: ObservableObject {
     ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
   }
 
-  /// Records `error` in `state` and reports it to the delegate.
+  /// Record `error` in `state` and report it to the delegate.
   private func fail(_ error: SunshineError) {
     state = .error(error)
     delegate?.updater(self, didFailWithError: error)
@@ -587,7 +587,7 @@ public final class SunshineUpdater: ObservableObject {
   }
 
   deinit {
-    // Ends any `for await` loop over `events` rather than leaving it suspended forever.
+    // End any `for await` loop over `events`. Otherwise it stays suspended.
     eventContinuation.finish()
   }
 }

@@ -1,13 +1,14 @@
 import Foundation
 
-/// Owns the paths and the handshake shared by the host process and the relaunch script.
-/// The swap and relaunch themselves happen in `RelaunchScript`, spawned detached so the
-/// host can terminate normally first.
+/// Paths and handshake shared by the host process and the relaunch script.
+/// `RelaunchScript` performs the swap and relaunch. It is spawned detached so the host can
+/// terminate normally first.
 enum RelaunchCoordinator {
   static let relaunchArgumentPrefix = "--sunshine-relaunched-from="
 
-  /// Both the script and the relaunched app derive this from the same raw tag, so the
-  /// sanitizing has to happen here, in one place, or the handshake never matches.
+  /// Sentinel file the relaunched app writes at startup.
+  /// The script and the relaunched app derive this path from the same raw tag. Sanitizing
+  /// happens only here. Otherwise the handshake does not match.
   static func sentinelURL(forBundleIdentifier bundleIdentifier: String, releaseTag: String) -> URL {
     SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
       .appendingPathComponent("launched-ok-\(SunshineCache.safeComponent(releaseTag))")
@@ -18,8 +19,8 @@ enum RelaunchCoordinator {
       .appendingPathComponent("relaunch.sh")
   }
 
-  /// Written by the host if its termination is cancelled after the script was spawned.
-  /// The script polls for this and exits without touching anything.
+  /// Abort file written by the host if termination is cancelled after the script spawns.
+  /// The script polls for it and exits without changing anything.
   static func abortURL(forBundleIdentifier bundleIdentifier: String) -> URL {
     SunshineCache.directory(forBundleIdentifier: bundleIdentifier)
       .appendingPathComponent("install-aborted")
@@ -30,12 +31,12 @@ enum RelaunchCoordinator {
       .appendingPathComponent("relaunch.log")
   }
 
-  /// Call this once, as early as possible, when a host app starts up (both UI and
-  /// headless integrations must wire this in `applicationDidFinishLaunching` or
-  /// equivalent) so a pending relaunch handshake can be confirmed.
+  /// Confirm a pending relaunch handshake.
+  /// Call this once, as early as possible in host app startup. UI and headless
+  /// integrations both call it from `applicationDidFinishLaunching` or equivalent.
   ///
-  /// - Parameter notifyOnSuccess: Mirrors `SunshineConfiguration.notifyOnSuccessfulUpdate`.
-  ///   When `false`, the handshake still completes but no system notification is posted.
+  /// - Parameter notifyOnSuccess: Matches `SunshineConfiguration.notifyOnSuccessfulUpdate`.
+  ///   If `false`, the handshake still completes and no system notification is posted.
   static func confirmSuccessfulRelaunchIfNeeded(
     bundleIdentifier: String, notifyOnSuccess: Bool = true
   ) {
@@ -56,8 +57,8 @@ enum RelaunchCoordinator {
     }
   }
 
-  /// Signals a spawned-but-still-waiting script to stand down, for a host whose
-  /// termination was cancelled after the script was already running.
+  /// Signal a waiting script to stand down.
+  /// Used if host termination was cancelled after the script started.
   static func abortPendingInstall(bundleIdentifier: String) {
     let url = abortURL(forBundleIdentifier: bundleIdentifier)
     try? FileManager.default.createDirectory(
@@ -65,8 +66,9 @@ enum RelaunchCoordinator {
     FileManager.default.createFile(atPath: url.path, contents: Data())
   }
 
-  /// Writes the script and launches it under `/bin/sh`, fully detached: no inherited
-  /// stdio and no wait, so it outlives this process. Returns as soon as it is running.
+  /// Write the script and launch it under `/bin/sh`, fully detached.
+  /// It inherits no stdio and is not awaited, so it outlives this process. Returns
+  /// immediately after launch.
   static func spawn(_ plan: RelaunchPlan) throws {
     try RelaunchScript.write(to: plan.scriptURL)
 

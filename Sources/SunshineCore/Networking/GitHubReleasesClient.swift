@@ -5,8 +5,8 @@ struct RateLimitInfo: Sendable {
   let resetAt: Date?
 }
 
-/// Thin wrapper over the GitHub Releases REST API. There is no custom appcast format: the
-/// release JSON itself (tag, body, assets) is the whole feed.
+/// Wrapper over the GitHub Releases REST API.
+/// There is no custom appcast format. The release JSON (tag, body, assets) is the feed.
 public struct GitHubReleasesClient: Sendable {
   public var session: URLSession
   public var token: String?
@@ -60,9 +60,9 @@ public struct GitHubReleasesClient: Sendable {
     return decoder
   }
 
-  /// Builds an API URL with `owner` and `repo` percent-encoded as single path segments,
-  /// so a configuration containing a space, `#`, or `/` fails as an error rather than
-  /// trapping on a nil URL or reaching an unintended endpoint.
+  /// API URL with `owner` and `repo` percent-encoded as single path segments.
+  /// A configuration containing a space, `#`, or `/` throws an error. It does not trap on
+  /// a nil URL or reach an unintended endpoint.
   private func apiURL(
     owner: String, repo: String, endpoint: String, queryItems: [URLQueryItem] = []
   ) throws -> URL {
@@ -86,15 +86,15 @@ public struct GitHubReleasesClient: Sendable {
     return url
   }
 
-  /// Fetches the single "latest" non-prerelease, non-draft release.
+  /// Fetch the "latest" release, which is neither a prerelease nor a draft.
   public func fetchLatestRelease(owner: String, repo: String) async throws -> GitHubRelease {
     let url = try apiURL(owner: owner, repo: repo, endpoint: "releases/latest")
     let data = try await perform(url)
     return try decoder().decode(GitHubRelease.self, from: data)
   }
 
-  /// Fetches recent releases (including prereleases/drafts as returned by the API),
-  /// for callers that need to consider prereleases or aggregate notes across versions.
+  /// Fetch recent releases, including prereleases and drafts as the API returns them.
+  /// Callers use this to consider prereleases or to aggregate notes across versions.
   public func fetchRecentReleases(owner: String, repo: String, perPage: Int = 10) async throws
     -> [GitHubRelease]
   {

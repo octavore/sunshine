@@ -3,9 +3,9 @@ import Foundation
 enum QuarantineRemover {
   private static let attributeName = "com.apple.quarantine"
 
-  /// Recursively strips `com.apple.quarantine` from every file in the bundle. Must only
-  /// be called after verification succeeds, never before, so Gatekeeper/quarantine
-  /// machinery is fully active while the authenticity check runs.
+  /// Remove `com.apple.quarantine` from every file in the bundle recursively.
+  /// Call this only after verification succeeds. Gatekeeper and quarantine checks then
+  /// stay fully active during the authenticity check.
   static func removeQuarantine(at url: URL) {
     removexattr(url.path, attributeName, XATTR_NOFOLLOW)
     guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: nil)

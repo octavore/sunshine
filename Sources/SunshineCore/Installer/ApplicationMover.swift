@@ -1,6 +1,6 @@
 import Foundation
 
-/// Copies a running app bundle into an Applications folder and launches the copy.
+/// Copy of a running app bundle into an Applications folder, followed by a launch of the copy.
 enum ApplicationMover {
   /// Candidate destination folders, in order of preference.
   static func defaultApplicationsDirectories() -> [URL] {
@@ -11,7 +11,7 @@ enum ApplicationMover {
     ]
   }
 
-  /// Copy `appURL` into the first writable folder of `directories` and return the copy's URL.
+  /// Copy `appURL` into the first writable folder of `directories` and return the copy URL.
   /// An existing bundle with the same name is moved to the trash first. The quarantine
   /// attribute is removed from the copy so it does not run translocated.
   static func copy(

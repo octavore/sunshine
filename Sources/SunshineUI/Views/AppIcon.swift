@@ -5,9 +5,10 @@ import SwiftUI
 #endif
 
 extension Image {
-  /// The running app's own icon, read via `CFBundleIconFile`/`CFBundleIconName` from
-  /// `Bundle.main`. Used as the default `appIcon` for `.sunshineUpdater(_:)` so hosts get
-  /// a logo for free without touching `NSApplication` (which is main-actor isolated).
+  /// Icon of the running app, read from `Bundle.main` via `CFBundleIconFile` or
+  /// `CFBundleIconName`.
+  /// It is the default `appIcon` for `.sunshineUpdater(_:)`. Hosts get a logo without
+  /// accessing `NSApplication`, which is main-actor isolated.
   public static func fromMainBundle() -> Image? {
     #if canImport(AppKit)
       let info = Bundle.main.infoDictionary

@@ -20,9 +20,8 @@ private struct PassingChecker: CodeSigningChecking {
     return Update(release: release, asset: asset)
   }
 
-  /// Creates a fake "bundle" (just a directory with a .app extension and a marker
-  /// file). Verification is mocked, so the bundle's contents don't need to be
-  /// real code-signed binaries.
+  /// Create a fake bundle, a directory with a .app extension and a marker file.
+  /// Verification is mocked, so the contents need not be code-signed binaries.
   private func makeFakeApp(at url: URL, marker: String) throws {
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     try marker.write(
@@ -73,7 +72,7 @@ private struct PassingChecker: CodeSigningChecking {
     try await session.install(
       makeVerified(extractedAppURL: extractedURL, tempDirectory: root), installURL: installURL)
 
-    // Nothing moves while the host is alive, which is the whole point of the script.
+    // Nothing moves while the host is alive.
     #expect(readMarker(at: installURL) == "OLD")
     #expect(readMarker(at: extractedURL) == "NEW")
 
@@ -84,7 +83,7 @@ private struct PassingChecker: CodeSigningChecking {
     #expect(plan.hostProcessIdentifier == ProcessInfo.processInfo.processIdentifier)
     #expect(plan.asideURL.lastPathComponent.hasPrefix(".MyApp (old, "))
     #expect(plan.arguments.count == 13)
-    // The script must never resolve these two through the environment.
+    // The script must not resolve these two commands through the environment.
     #expect(plan.openCommand == "/usr/bin/open")
     #expect(plan.pgrepCommand == "/usr/bin/pgrep")
     #expect(FileManager.default.fileExists(atPath: plan.markerURL.path))
@@ -103,8 +102,8 @@ private struct PassingChecker: CodeSigningChecking {
     let installURL = installDir.appendingPathComponent("MyApp.app")
     try makeFakeApp(at: installURL, marker: "OLD")
 
-    // Remove write permission on the parent directory so the swap's rename cannot
-    // occur, matching a shared-machine /Applications scenario.
+    // Remove write permission on the parent directory so the swap rename cannot occur.
+    // This matches a shared machine with a protected /Applications.
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: installDir.path)
 
     let extractedURL = root.appendingPathComponent("staging/MyApp.app")
@@ -122,7 +121,7 @@ private struct PassingChecker: CodeSigningChecking {
     }
 
     #expect(captured.plan == nil)
-    #expect(readMarker(at: installURL) == "OLD")  // untouched
+    #expect(readMarker(at: installURL) == "OLD")  // Unchanged.
   }
 
   @Test func recoveryRestoresTheAsideBundleWhenTheScriptDiedMidSwap() throws {
@@ -200,7 +199,7 @@ private struct PassingChecker: CodeSigningChecking {
   }
 }
 
-/// Reference box so the `@Sendable` spawn closure can hand a value back to the test.
+/// Reference box that returns a value from the `@Sendable` spawn closure to the test.
 private final class Captured: @unchecked Sendable {
   var plan: RelaunchPlan?
 }

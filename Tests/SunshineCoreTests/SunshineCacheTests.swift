@@ -11,7 +11,7 @@ import Testing
   }
 
   @Test func separatorsCannotEscapeTheCacheDirectory() {
-    // Git allows "/" in a tag, which would otherwise nest a directory.
+    // Git allows "/" in a tag. Unsanitized, it would nest a directory.
     #expect(SunshineCache.safeComponent("release/1.0") == "release_1.0")
     #expect(!SunshineCache.safeComponent("../../etc/passwd").contains("/"))
     #expect(!SunshineCache.safeComponent("..\\..\\windows").contains("\\"))
@@ -24,7 +24,7 @@ import Testing
   }
 
   @Test func assetExtensionsSurviveSanitizing() {
-    // ArchiveExtractor dispatches on the extension, so it has to be preserved.
+    // ArchiveExtractor selects its method by extension. The extension must be preserved.
     #expect(SunshineCache.safeComponent("My App (arm64).zip").hasSuffix(".zip"))
     #expect(SunshineCache.safeComponent("My App (arm64).dmg").hasSuffix(".dmg"))
   }
@@ -39,8 +39,8 @@ import Testing
       forBundleIdentifier: "test.app", releaseTag: "release/1.0")
     #expect(directory.lastPathComponent == "release_1.0")
 
-    // The script and the relaunched app both derive the sentinel from the raw tag, so
-    // the two paths have to match exactly.
+    // The script and the relaunched app derive the sentinel from the raw tag. The two
+    // paths must match exactly.
     let fromScript = RelaunchCoordinator.sentinelURL(
       forBundleIdentifier: "test.app", releaseTag: "release/1.0")
     let fromApp = RelaunchCoordinator.sentinelURL(

@@ -42,8 +42,9 @@ public struct GitHubRelease: Sendable, Decodable, Equatable {
     case assets
   }
 
-  /// Builds a release directly, without decoding, for supplying a fixed list of releases
-  /// explicitly (e.g. to `StaticReleasesProvider`, or in tests and SwiftUI previews).
+  /// Create a release directly, without decoding.
+  /// Use it for a fixed list of releases, e.g. in `StaticReleasesProvider`, tests, and
+  /// SwiftUI previews.
   public init(
     tagName: String,
     name: String? = nil,

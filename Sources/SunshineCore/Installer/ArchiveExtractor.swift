@@ -6,8 +6,8 @@ enum ArchiveExtractor {
     var description: String { message }
   }
 
-  /// Extracts a downloaded `.zip` or `.dmg` asset and returns the URL of the single
-  /// top-level `.app` bundle it contains.
+  /// Extract a downloaded `.zip` or `.dmg` asset.
+  /// Returns the URL of the top-level `.app` bundle in the archive.
   static func extractApp(fromArchiveAt archiveURL: URL, into destinationDirectory: URL) throws
     -> URL
   {
@@ -24,8 +24,8 @@ enum ArchiveExtractor {
   }
 
   private static func extractZip(_ archiveURL: URL, into destinationDirectory: URL) throws -> URL {
-    // `ditto` preserves bundle structure and extended attributes. It is
-    // what Sparkle and Xcode use, and is more reliable than Foundation's zip APIs.
+    // `ditto` preserves bundle structure and extended attributes. Sparkle and Xcode use it.
+    // It is more reliable than Foundation's zip APIs.
     try run("/usr/bin/ditto", ["-x", "-k", archiveURL.path, destinationDirectory.path])
     return try findApp(in: destinationDirectory)
   }

@@ -1,11 +1,13 @@
 import Foundation
 
 public enum UpdateAutomationLevel: Sendable, Equatable {
-  /// Only surfaces `.updateAvailable`; the caller drives download/verify/install explicitly.
+  /// Surface `.updateAvailable` only.
+  /// The caller starts download, verification, and install explicitly.
   case manual
-  /// Downloads and verifies automatically, but pauses at `.readyToInstall` for confirmation.
+  /// Download and verify automatically.
+  /// The pipeline pauses at `.readyToInstall` for confirmation.
   case autoDownload
-  /// Runs the full check → download → verify → install pipeline unattended.
+  /// Run the full check, download, verify, and install pipeline unattended.
   case autoDownloadAndInstall
 }
 
@@ -15,24 +17,24 @@ public struct SunshineConfiguration: Sendable {
   public var allowPrereleases: Bool
   public var assetMatcher: AssetMatching
   public var githubToken: String?
-  /// Interval between automatic background checks. `nil` disables automatic checking
-  /// (the host app must call `checkForUpdates()` itself).
+  /// Interval between automatic background checks.
+  /// `nil` disables automatic checking. The host app then calls `checkForUpdates()` itself.
   public var checkInterval: TimeInterval?
-  /// Where the running app is installed. `nil` infers from `Bundle.main.bundleURL`.
+  /// Install location of the running app. `nil` uses `Bundle.main.bundleURL`.
   public var installLocation: URL?
-  /// Require a passing Gatekeeper/notarization check in addition to a Team ID match.
+  /// Require a passing Gatekeeper and notarization check in addition to a Team ID match.
   public var requireNotarization: Bool
   public var automationLevel: UpdateAutomationLevel
   /// Post a system notification on the first launch after a successful update.
   public var notifyOnSuccessfulUpdate: Bool
-  /// Post a system notification when a background check finds an update but
-  /// `automationLevel` is `.manual`, so it would otherwise sit unseen until the host
-  /// app is brought to the foreground. Has no effect on a check the host app triggers
-  /// itself, or when `checkInterval` is `nil`.
+  /// Post a system notification if a background check finds an update and
+  /// `automationLevel` is `.manual`.
+  /// Without it, the update stays unseen until the host app is in the foreground. This has
+  /// no effect on a check the host app starts, or if `checkInterval` is `nil`.
   public var notifyOnUpdateAvailable: Bool
-  /// Post a system notification when an unattended download/verify/install, run by the
-  /// background check loop, fails. Has no effect on a failure from a foreground,
-  /// user-initiated action.
+  /// Post a system notification if an unattended download, verification, or install fails.
+  /// The background check loop runs these. This has no effect on a failure from a
+  /// foreground user action.
   public var notifyOnUpdateFailure: Bool
 
   public init(

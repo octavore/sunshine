@@ -1,9 +1,10 @@
 import SunshineCore
 import SwiftUI
 
-/// A small, non-blocking badge for `SunshineUpdateUIStyle.cornerIndicator`. Sits in the
-/// window's bottom-trailing corner and opens the full update review in a popover on tap,
-/// instead of interrupting the user with a sheet the moment an update is found.
+/// Small, non-blocking badge for `SunshineUpdateUIStyle.cornerIndicator`.
+/// It is placed in the bottom-trailing corner of the window and opens the full update
+/// review in a popover on tap. A sheet does not interrupt the user when an update is
+/// found.
 public struct UpdateIndicatorView: View {
   @ObservedObject var controller: SunshineUpdaterUIController
   let appName: String

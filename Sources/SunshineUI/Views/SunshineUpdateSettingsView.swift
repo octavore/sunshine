@@ -1,22 +1,22 @@
 import SunshineCore
 import SwiftUI
 
-/// A drop-in "Updates" settings pane: app identity, the standard auto-check /
-/// auto-install / channel controls, a Check Now button, and, when a check finds
-/// one, the update review (notes, Install & Relaunch, Skip, Remind Me Later)
-/// inline, in the style of apps like Tailscale's "About" tab.
+/// Drop-in "Updates" settings pane.
+/// It shows app identity, the auto-check, auto-install, and channel controls, and a Check
+/// Now button. If a check finds an update, the pane shows the update review inline with
+/// notes, Install & Relaunch, Skip, and Remind Me Later. The layout resembles the "About"
+/// tab of Tailscale.
 ///
-/// Reads and writes the updater's live settings directly, so toggling here takes
-/// effect immediately and persists across launches. Check Now routes through
-/// ``SunshineUpdaterUIController/refreshUpdateStatus()``, so a version the user
-/// previously skipped or deferred is resurfaced here rather than reported as "up
-/// to date". While this view is on screen it sets
-/// ``SunshineUpdaterUIController/suppressesUpdateSheet``, so an update found here
-/// shows in the pane rather than also popping as a sheet on another window.
+/// The pane reads and writes the live updater settings, so a toggle takes effect
+/// immediately and persists across launches. Check Now calls
+/// ``SunshineUpdaterUIController/refreshUpdateStatus()``, so a skipped or deferred version
+/// is shown again here and not reported as "up to date". While this view is on screen it
+/// sets ``SunshineUpdaterUIController/suppressesUpdateSheet``. An update found here shows
+/// in the pane and does not also open as a sheet on another window.
 public struct SunshineUpdateSettingsView: View {
   @ObservedObject var controller: SunshineUpdaterUIController
-  // The toggles read and write settings on the updater, whose setters fire its
-  // own `objectWillChange`; observe it directly or the checkboxes don't
+  // The toggles read and write settings on the updater. Its setters send their own
+  // `objectWillChange`. Observe the updater directly. Otherwise the checkboxes do not
   // repaint when toggled.
   @ObservedObject var updater: SunshineUpdater
   let appName: String
@@ -60,8 +60,8 @@ public struct SunshineUpdateSettingsView: View {
         }
       }
 
-      // The review of a found update sits directly under the app identity,
-      // above the settings controls.
+      // The review of a found update appears directly under the app identity and above
+      // the settings controls.
       outcome
 
       Divider()
@@ -140,8 +140,8 @@ public struct SunshineUpdateSettingsView: View {
     }
   }
 
-  /// Sets the pending-update review off from the settings controls with a
-  /// bordered, tinted container.
+  /// Separate the pending update review from the settings controls with a bordered, tinted
+  /// container.
   private func card(@ViewBuilder _ content: () -> some View) -> some View {
     content()
       .padding(12)

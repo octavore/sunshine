@@ -32,9 +32,9 @@ struct ContentView: View {
   }
 }
 
-/// Owns the `SunshineUpdater`/`SunshineUpdaterUIController` pair, rebuilt from scratch
-/// whenever the enclosing `ContentView` gives it a new identity (see `.id(releaseConfig)`)
-/// so changes made on the `Configuration` screen take effect.
+/// Holder of the `SunshineUpdater` and `SunshineUpdaterUIController` pair.
+/// The pair is rebuilt if `ContentView` gives this view a new identity, see
+/// `.id(releaseConfig)`. Changes on the `Configuration` screen then take effect.
 private struct UpdaterHost: View {
   let screen: ExampleScreen
   @Binding var releaseConfig: ExampleReleaseConfig
@@ -95,10 +95,10 @@ private struct UpdaterHost: View {
   }
 }
 
-/// All three routes the package can exercise to a system notification. Every one of
-/// them requires a real, signed `.app` bundle with a bundle identifier for macOS to
-/// authorize and deliver the notification — run this app via `strudel run`, not
-/// `swift run`/`axo example`.
+/// Screen that triggers all three system notifications of the package.
+/// Each one requires a signed `.app` bundle with a bundle identifier, so macOS can authorize
+/// and deliver the notification. Run this app with `strudel run`, not `swift run` or
+/// `axo example`.
 private struct NotificationsTestView: View {
   @State private var tag = "9.9.9-example"
 
@@ -160,11 +160,11 @@ private struct NotificationsTestView: View {
   }
 }
 
-/// Shown in place of `UpdateAvailableView`/`UpdateIndicatorView` once there's no
-/// `pendingUpdate` to display (e.g. right after "Skip This Version"). Those views assume a
-/// presenter dismisses them once state changes (they're normally shown in a sheet or a
-/// self-hiding badge); the example app displays them as standalone gallery screens, so it
-/// needs its own empty state to explain why nothing update-related is showing.
+/// Empty state shown in place of `UpdateAvailableView` and `UpdateIndicatorView`.
+/// It appears if there is no `pendingUpdate`, e.g. after "Skip This Version". Those views
+/// expect a presenter to dismiss them when the state changes, as a sheet or a self-hiding
+/// badge does. The example app shows them as standalone gallery screens, so it needs this
+/// view to explain why no update is shown.
 private struct NoPendingUpdateView: View {
   @ObservedObject var controller: SunshineUpdaterUIController
 

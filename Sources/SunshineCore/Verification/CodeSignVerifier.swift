@@ -7,9 +7,9 @@ enum CodeSignVerifier {
     var description: String { message }
   }
 
-  /// Validates the code signature at `url` (strict, deep, all architectures, equivalent
-  /// to `codesign --verify --deep --strict`) and returns its Team ID, or throws if the
-  /// signature itself is invalid.
+  /// Validate the code signature at `url` and return its Team ID.
+  /// Validation is strict, deep, and covers all architectures, like
+  /// `codesign --verify --deep --strict`. Throws if the signature is invalid.
   static func teamIdentifier(forSignedBundleAt url: URL) throws -> String? {
     var staticCode: SecStaticCode?
     let createStatus = SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode)
@@ -37,7 +37,7 @@ enum CodeSignVerifier {
     return info[kSecCodeInfoTeamIdentifier as String] as? String
   }
 
-  /// Reads the Team ID of the currently running process, live, never from cached config.
+  /// Read the Team ID of the running process directly. It is not read from cached config.
   static func teamIdentifierOfRunningApp() throws -> String? {
     var selfCode: SecCode?
     let selfStatus = SecCodeCopySelf(SecCSFlags(), &selfCode)
@@ -45,8 +45,8 @@ enum CodeSignVerifier {
       throw SigningError(message: statusMessage(selfStatus))
     }
     var information: CFDictionary?
-    // SecCode is toll-free castable to SecStaticCode at the C level; the Swift
-    // overlay only exposes the SecStaticCode-typed overload.
+    // SecCode casts to SecStaticCode at the C level. The Swift overlay exposes only the
+    // SecStaticCode overload.
     let staticSelfCode = unsafeBitCast(selfCode, to: SecStaticCode.self)
     let infoStatus = SecCodeCopySigningInformation(
       staticSelfCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
@@ -56,9 +56,10 @@ enum CodeSignVerifier {
     return info[kSecCodeInfoTeamIdentifier as String] as? String
   }
 
-  /// Shells out to `spctl` since there is no public Security.framework symbol for
-  /// notarization-ticket verification. Any failure to determine status returns `false`
-  /// (fail closed: callers treat unknown as rejected when notarization is required).
+  /// Check notarization with `spctl`.
+  /// Security.framework has no public symbol for notarization ticket verification. Any
+  /// failure to determine the status returns `false`. Callers treat an unknown status as
+  /// rejected if notarization is required.
   static func checkNotarization(at url: URL) -> Bool {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/sbin/spctl")

@@ -9,8 +9,8 @@ public enum InstallLocationIssue: Sendable, Equatable {
 }
 
 public enum InstallLocationChecker {
-  /// Reason the app at `appURL` is in a location that blocks updates, if any.
-  /// Returns `nil` for ordinary locations. A writability failure alone is not reported here.
+  /// Reason the app at `appURL` is in a location that blocks updates.
+  /// Returns `nil` for ordinary locations. A writability failure alone is not reported.
   public static func issue(for appURL: URL) -> InstallLocationIssue? {
     if appURL.path.contains("/AppTranslocation/") {
       return .translocated
@@ -23,9 +23,9 @@ public enum InstallLocationChecker {
     return nil
   }
 
-  /// True only if both the bundle itself and its parent directory are writable by the
-  /// current user. Parent-directory write access is required to perform the
-  /// move-aside/move-in swap, not just write access to the bundle's contents.
+  /// Whether the current user can write to both the bundle and its parent directory.
+  /// The move-aside and move-in swap requires write access to the parent directory, in
+  /// addition to the bundle contents.
   public static func isWritable(_ appURL: URL) -> Bool {
     let fileManager = FileManager.default
     let parent = appURL.deletingLastPathComponent()

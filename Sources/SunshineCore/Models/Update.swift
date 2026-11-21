@@ -1,12 +1,12 @@
 import Foundation
 
-/// A normalized, update-check-ready representation of a GitHub release plus the asset
-/// selected for this machine's architecture.
+/// Normalized GitHub release with the asset selected for this machine's architecture.
 public struct Update: Sendable, Identifiable, Equatable {
-  public let id: String  // release tag
+  /// Release tag.
+  public let id: String
   public let version: AppVersion
-  /// Release notes for this release only. Use `SunshineUpdater` to obtain aggregated
-  /// notes across any skipped intermediate versions.
+  /// Release notes of this release only.
+  /// `SunshineUpdater` provides notes aggregated across skipped intermediate versions.
   public let releaseNotesMarkdown: String?
   public let publishedAt: Date?
   public let htmlURL: URL?

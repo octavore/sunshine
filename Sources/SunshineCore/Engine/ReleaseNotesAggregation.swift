@@ -1,11 +1,11 @@
 import Foundation
 
 enum ReleaseNotesAggregation {
-  /// Builds the combined release-notes body shown for `update`: its own notes first,
-  /// then every release in `candidates` newer than `runningVersion`, ordered by version
-  /// (newest first) so a patch to an older branch published later does not jump the
-  /// list. Returns `nil` when there is nothing to combine, leaving the update's own
-  /// notes in place.
+  /// Combined release notes body for `update`.
+  /// The notes of `update` come first. Releases in `candidates` newer than `runningVersion`
+  /// follow, ordered by version with the newest first. A patch to an older branch
+  /// published later does not move up the list. Returns `nil` if there is nothing to
+  /// combine.
   static func combinedNotes(
     for update: Update, candidates: [GitHubRelease], runningVersion: AppVersion
   ) -> String? {

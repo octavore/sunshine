@@ -31,7 +31,7 @@ import Testing
 
     #expect(combined.contains("## 2.1.0"))
     #expect(combined.contains("## 2.0.0"))
-    // 1.9.0 is the running version, not newer than it.
+    // 1.9.0 is the running version and is not newer than it.
     #expect(!combined.contains("## 1.9.0"))
     #expect(!combined.contains("Already installed."))
   }

@@ -1,9 +1,9 @@
 import Foundation
 
-/// Abstraction over the actual codesign/notarization system calls, so `UpdateVerifier`'s
-/// decision logic can be unit tested with canned results instead of real signed binaries.
+/// Abstraction over the code signing and notarization system calls.
+/// Unit tests of `UpdateVerifier` use canned results instead of signed binaries.
 public protocol CodeSigningChecking: Sendable {
-  /// Returns the Team ID, or throws on an invalid signature.
+  /// Return the Team ID, or throw on an invalid signature.
   func validateSignature(at url: URL) throws -> String?
   func teamIdentifierOfRunningApp() throws -> String?
   func isNotarized(at url: URL) -> Bool

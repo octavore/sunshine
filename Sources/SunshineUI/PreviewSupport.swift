@@ -2,8 +2,8 @@
   import Foundation
   import SunshineCore
 
-  /// Sample data + a network-free `SunshineUpdater` for `#Preview`s across `SunshineUI`.
-  /// Not part of the public API. Built only in debug builds.
+  /// Sample data and a `SunshineUpdater` without network access, for `#Preview`s in `SunshineUI`.
+  /// This is not public API. It is built only in debug builds.
   enum PreviewSupport {
     static let releaseNotes = """
       ## What's New
@@ -45,9 +45,9 @@
       release(tag: "1.9.0", name: "1.9.0", daysAgo: 90),
     ]
 
-    /// A `SunshineUpdater` backed by `StaticReleasesProvider`, so previews never hit the
-    /// network. Callers should immediately trigger `checkForUpdates()` if they need
-    /// `state`/`pendingUpdate` populated before rendering.
+    /// `SunshineUpdater` backed by `StaticReleasesProvider`, so previews do not use the
+    /// network. Callers that need `state` and `pendingUpdate` populated before rendering
+    /// call `checkForUpdates()` immediately.
     @MainActor
     static func updater(releases: [GitHubRelease] = releases) -> SunshineUpdater {
       SunshineUpdater(

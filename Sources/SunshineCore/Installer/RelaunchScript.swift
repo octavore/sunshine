@@ -1,7 +1,7 @@
 import Foundation
 
-/// Everything the relaunch script needs, in the order it reads its positional arguments.
-/// Kept as a struct so tests can assert on what would be spawned without running it.
+/// Inputs of the relaunch script, in the order the script reads its positional arguments.
+/// Tests assert on this struct instead of running the script.
 struct RelaunchPlan: Sendable, Equatable {
   let scriptURL: URL
   let hostProcessIdentifier: Int32
@@ -13,16 +13,18 @@ struct RelaunchPlan: Sendable, Equatable {
   let abortURL: URL
   let logURL: URL
   let releaseTag: String
-  /// The two executables the script calls out to, as absolute paths. Passed in rather
-  /// than resolved by the script so neither `PATH` nor any other inherited environment
-  /// variable can decide what runs after the host exits. Tests substitute stubs.
+  /// Absolute paths of the two executables the script calls.
+  /// The host passes them in. The script does not resolve them, so `PATH` and other
+  /// inherited environment variables cannot change what runs after the host exits. Tests
+  /// substitute stubs.
   var openCommand: String = "/usr/bin/open"
   var pgrepCommand: String = "/usr/bin/pgrep"
   /// Seconds to wait for the relaunched app to write its sentinel before rolling back.
   var sentinelTimeoutSeconds: Int = 10
 
-  /// Paths are passed as arguments rather than interpolated into the script, so nothing
-  /// in a path is ever parsed by the shell.
+  /// Positional script arguments.
+  /// Paths are passed as arguments and are not interpolated into the script, so the shell
+  /// never parses a path.
   var arguments: [String] {
     [
       scriptURL.path,
@@ -42,22 +44,22 @@ struct RelaunchPlan: Sendable, Equatable {
   }
 }
 
-/// The shell script that performs the bundle swap after the host process has exited.
+/// Shell script that swaps the bundle after the host process exits.
 ///
-/// It is embedded as a string rather than shipped as an SPM resource deliberately: a
-/// resource bundle would add a `Bundle.module` lookup and a copy step for every app that
-/// embeds Sunshine, and this needs to work with no build configuration at all.
+/// The script is embedded as a string and not shipped as an SPM resource. A resource
+/// bundle adds a `Bundle.module` lookup and a copy step for every app that embeds
+/// Sunshine. The script must work without build configuration.
 enum RelaunchScript {
   static let source = #"""
     #!/bin/sh
     # Written and spawned by Sunshine. Waits for the host app to exit, swaps the new
     # bundle into place, relaunches it, and rolls back if the relaunch is not confirmed.
-    # Every path arrives as a positional argument, so no path is ever shell-parsed.
+    # Every path arrives as a positional argument, so the shell never parses a path.
     set -u
 
-    # The standard utilities below (mv, rm, date, sleep, kill, touch) are resolved from a
-    # fixed PATH rather than whatever the host app happened to export, for the same reason
-    # the two commands below arrive as arguments.
+    # Standard utilities (mv, rm, date, sleep, kill, touch) resolve from a fixed PATH.
+    # They do not use the PATH exported by the host app. The two commands below arrive
+    # as arguments for the same reason.
     PATH=/usr/bin:/bin
     export PATH
 
@@ -70,8 +72,8 @@ enum RelaunchScript {
     ABORT_PATH="$7"
     LOG_PATH="$8"
     RELEASE_TAG="$9"
-    # Absolute paths supplied by the host, never read from the environment: this script
-    # runs after the app has exited, so nothing inherited should choose what it executes.
+    # Absolute paths supplied by the host. They are not read from the environment. This
+    # script runs after the app exits, so inherited values must not select what it runs.
     OPEN_CMD="${10}"
     PGREP_CMD="${11}"
     SENTINEL_TIMEOUT="${12}"
@@ -80,9 +82,9 @@ enum RelaunchScript {
         echo "[sunshine $(date '+%Y-%m-%d %H:%M:%S')] $1" >>"$LOG_PATH" 2>/dev/null
     }
 
-    # This script runs `rm -rf` on two of these paths, so require each one to be an
-    # absolute path, below the root, ending in `.app`. An empty, relative, or overly
-    # broad path is refused rather than deleted.
+    # This script runs `rm -rf` on two of these paths. Each path must be absolute, below
+    # the root, and end in `.app`. The script refuses an empty, relative, or overly broad
+    # path.
     for path in "$INSTALL_PATH" "$ASIDE_PATH" "$STAGED_PATH"; do
         case "$path" in
             /*/*.app) ;;
@@ -108,14 +110,13 @@ enum RelaunchScript {
         finish 0
     }
 
-    # Wait for the host to exit. There is no timeout ceiling on purpose: swapping the
-    # bundle under a still-running process is worse than never updating. A host whose
-    # termination was cancelled writes the abort file to release us.
+    # Wait for the host to exit. There is no timeout. Swapping the bundle under a running
+    # process is worse than never updating. A host whose termination was cancelled writes
+    # the abort file to release the script.
     #
-    # The abort file is only honoured while the host is alive. Once it has exited, its
-    # intent to update stands, even if it wrote an abort first: a host that asked to
-    # cancel and then quit anyway should come back up on the new version, not silently
-    # on the old one.
+    # The abort file applies only while the host is alive. After the host exits, the
+    # update proceeds even if the host wrote an abort file first. A host that cancelled
+    # and then quit should relaunch on the new version.
     if [ "$HOST_PID" != "0" ]; then
         log "waiting for host process $HOST_PID to exit"
         while kill -0 "$HOST_PID" 2>/dev/null; do
@@ -154,10 +155,10 @@ enum RelaunchScript {
         ticks=$((ticks - 1))
     done
 
-    # Weaker fallback for a host that builds its updater lazily and so never writes the
-    # sentinel: the new bundle's executable is running. Restricted to this user's own
-    # processes, since `pgrep -f` otherwise matches any process on the machine whose
-    # command line happens to contain the path.
+    # Weaker fallback for a host that builds its updater lazily and never writes the
+    # sentinel. The check is whether the new bundle's executable is running. It is limited
+    # to processes of this user. Otherwise `pgrep -f` matches any process whose command
+    # line contains the path.
     if [ "$confirmed" -eq 0 ] && "$PGREP_CMD" -U "$(id -u)" -f "$INSTALL_PATH/Contents/MacOS/" >/dev/null 2>&1; then
         log "sentinel never appeared, but the new bundle is running"
         confirmed=1
@@ -178,13 +179,13 @@ enum RelaunchScript {
         finish 1
     fi
 
-    # The marker survives so the next launch can finish the recovery.
+    # The marker remains so the next launch can finish the recovery.
     log "rollback failed; the previous bundle is still at $ASIDE_PATH"
     finish 1
 
     """#
 
-  /// Writes the script to `url`, replacing any copy left by an earlier install.
+  /// Write the script to `url`, replacing any copy from an earlier install.
   static func write(to url: URL) throws {
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

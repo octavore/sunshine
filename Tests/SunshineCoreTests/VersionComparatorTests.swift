@@ -66,7 +66,7 @@ import Testing
       AppVersion(shortVersion: "1.0.0-beta.2").isUpdate(AppVersion(shortVersion: "1.0.0-beta.10")))
     // Numeric identifiers rank below alphanumeric ones.
     #expect(AppVersion(shortVersion: "1.0.0-1").isUpdate(AppVersion(shortVersion: "1.0.0-alpha")))
-    // A shorter run of otherwise-equal identifiers ranks lower.
+    // A shorter run of otherwise equal identifiers ranks lower.
     #expect(
       AppVersion(shortVersion: "1.0.0-beta").isUpdate(AppVersion(shortVersion: "1.0.0-beta.1")))
     // Alphanumeric identifiers compare lexically.

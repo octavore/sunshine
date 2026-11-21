@@ -1,7 +1,7 @@
 import Foundation
 
-/// A breadcrumb written to disk immediately before an install swap begins, so a future
-/// launch can detect (and, in later versions, recover from) a process that died mid-swap.
+/// Breadcrumb file written immediately before an install swap begins.
+/// A later launch uses it to detect and recover from a process that died during the swap.
 struct PendingInstallMarker: Codable {
   let installURL: URL
   let oldAsidePath: URL
@@ -36,18 +36,18 @@ enum SunshineCache {
   private static let allowedComponentCharacters = CharacterSet.alphanumerics
     .union(CharacterSet(charactersIn: "-._"))
 
-  /// Reduces server-supplied text to a single safe filename component. Release tags and
-  /// asset names both reach the filesystem, and a git tag may legally contain "/"
-  /// ("release/1.0"), which would otherwise nest a directory or escape the cache. Any
-  /// character outside `[A-Za-z0-9-._]` becomes "_", and a component made only of dots
-  /// references a directory rather than naming one, so it becomes "_" too.
+  /// Reduce server-supplied text to a single safe filename component.
+  /// Release tags and asset names both reach the filesystem. A git tag can contain "/",
+  /// as in "release/1.0", which would nest a directory or escape the cache. Any character
+  /// outside `[A-Za-z0-9-._]` becomes "_". A component made only of dots refers to a
+  /// directory and also becomes "_".
   static func safeComponent(_ name: String) -> String {
     let mapped = String(
       name.unicodeScalars.map {
         allowedComponentCharacters.contains($0) ? Character($0) : "_"
       })
-    // Filenames are capped well below the 255-byte limit; tags and asset names are
-    // far shorter in practice.
+    // Cap filenames well below the 255-byte limit. Tags and asset names are shorter in
+    // practice.
     let truncated = String(mapped.prefix(120))
     if truncated.isEmpty || truncated.allSatisfy({ $0 == "." }) { return "_" }
     return truncated

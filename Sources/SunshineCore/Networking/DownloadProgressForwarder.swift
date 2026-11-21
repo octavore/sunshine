@@ -1,8 +1,8 @@
 import Foundation
 
-/// Per-task `URLSession` delegate that reports download progress as a 0...1 fraction.
-/// Used by `SunshineUpdater.download(_:)` so the update sheet can show a live progress bar
-/// instead of appearing frozen while a multi-megabyte bundle downloads.
+/// Per-task `URLSession` delegate that reports download progress as a fraction from 0 to 1.
+/// `SunshineUpdater.download(_:)` uses it so the update sheet shows a live progress bar
+/// during a large download.
 final class DownloadProgressForwarder: NSObject, URLSessionTaskDelegate, URLSessionDownloadDelegate,
   @unchecked Sendable
 {
@@ -24,8 +24,8 @@ final class DownloadProgressForwarder: NSObject, URLSessionTaskDelegate, URLSess
     onProgress(fraction)
   }
 
-  // Required by `URLSessionDownloadDelegate`; the downloaded file is consumed via the
-  // async `download(for:delegate:)` return value, so nothing to do here.
+  // Required by `URLSessionDownloadDelegate`. The async `download(for:delegate:)` return
+  // value provides the downloaded file, so this does nothing.
   func urlSession(
     _ session: URLSession,
     downloadTask: URLSessionDownloadTask,

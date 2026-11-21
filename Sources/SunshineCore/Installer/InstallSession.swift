@@ -7,18 +7,19 @@ public struct VerifiedUpdate: Sendable {
   public let verificationReport: VerificationReport
 }
 
-/// Prepares the swap, then hands it to a detached shell script that waits for this
-/// process to exit before touching anything. Nothing is moved while the host is alive, so
-/// a host that fails to terminate leaves the installed bundle exactly as it was.
+/// Install preparation that hands the swap to a detached shell script.
+/// The script waits for this process to exit before changing anything. Nothing is moved
+/// while the host is alive, so a host that fails to terminate leaves the installed bundle
+/// unchanged.
 struct InstallSession: Sendable {
   let bundleIdentifier: String
   let verifier: UpdateVerifier
-  /// Injectable so tests can inspect what would be spawned without running a process.
+  /// Spawn action. Tests replace it to inspect the plan without running a process.
   var spawn: @Sendable (RelaunchPlan) throws -> Void = RelaunchCoordinator.spawn
 
-  /// Validates, stages, and spawns the relaunch script. Returns once the script is
-  /// running and waiting; the caller is then expected to terminate the process. A throw
-  /// means nothing was moved and the installed app is untouched.
+  /// Validate, stage, and spawn the relaunch script.
+  /// Returns once the script is running and waiting. The caller then terminates the
+  /// process. A throw means nothing was moved and the installed app is unchanged.
   func install(_ verified: VerifiedUpdate, installURL: URL) async throws {
     if let issue = InstallLocationChecker.issue(for: installURL) {
       throw SunshineError.installLocationUnsuitable(installURL, issue)
@@ -27,8 +28,8 @@ struct InstallSession: Sendable {
       throw SunshineError.installLocationNotWritable(installURL)
     }
 
-    // Re-verify immediately before commit: guards against a long delay between
-    // "ready to install" and the user actually confirming.
+    // Re-verify immediately before commit. The user can wait long between "ready to
+    // install" and confirming.
     _ = try verifier.verify(appAt: verified.extractedAppURL)
 
     let asideURL = installURL.deletingLastPathComponent()
@@ -36,8 +37,8 @@ struct InstallSession: Sendable {
         ".\(installURL.deletingPathExtension().lastPathComponent) (old, \(Int(Date().timeIntervalSince1970))).app"
       )
 
-    // Done here rather than in the script: the staged bundle is already verified and
-    // still ours, and it keeps `xattr` out of the shell.
+    // Remove quarantine here and not in the script. The staged bundle is already verified.
+    // The script does not need to run `xattr`.
     QuarantineRemover.removeQuarantine(at: verified.extractedAppURL)
 
     let markerURL = PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier)
@@ -49,14 +50,14 @@ struct InstallSession: Sendable {
       startedAt: Date()
     )
     // A write failure aborts the install. Without the marker, the next launch cannot
-    // restore the bundle if the script dies mid-swap.
+    // restore the bundle if the script dies during the swap.
     try marker.write(to: markerURL)
 
     let sentinelURL = RelaunchCoordinator.sentinelURL(
       forBundleIdentifier: bundleIdentifier, releaseTag: verified.update.id)
     let abortURL = RelaunchCoordinator.abortURL(forBundleIdentifier: bundleIdentifier)
-    // A same-tag reinstall could otherwise be confirmed by the previous install's
-    // sentinel, and a previous cancelled install by its abort file.
+    // Remove old files. A sentinel from an earlier install could confirm a reinstall of
+    // the same tag. An abort file from an earlier cancelled install could cancel this one.
     try? FileManager.default.removeItem(at: sentinelURL)
     try? FileManager.default.removeItem(at: abortURL)
 
@@ -81,9 +82,9 @@ struct InstallSession: Sendable {
     }
   }
 
-  /// Finishes a swap whose script died partway through: if the installed bundle is gone
-  /// but an aside copy from the recorded install is still present, move it back. Runs at
-  /// `SunshineUpdater` init, before the stale-aside sweep.
+  /// Finish a swap whose script died partway through.
+  /// If the installed bundle is gone and the aside copy from the recorded install exists,
+  /// move it back. Runs at `SunshineUpdater` init, before the stale aside sweep.
   static func recoverInterruptedInstall(bundleIdentifier: String) {
     let markerURL = PendingInstallMarker.markerURL(forBundleIdentifier: bundleIdentifier)
     guard let marker = PendingInstallMarker.read(from: markerURL) else { return }
@@ -95,15 +96,16 @@ struct InstallSession: Sendable {
     if !installed && aside {
       try? fileManager.moveItem(at: marker.oldAsidePath, to: marker.installURL)
     } else if installed && aside {
-      // The swap completed but cleanup did not; the aside copy is now dead weight.
+      // The swap completed and cleanup did not. The aside copy is no longer needed.
       try? fileManager.removeItem(at: marker.oldAsidePath)
     }
 
     PendingInstallMarker.remove(at: markerURL)
   }
 
-  /// Best-effort cleanup of aside'd bundles left behind by an interrupted install, run
-  /// at each `SunshineUpdater` init so failed/aborted updates self-heal disk usage.
+  /// Best-effort cleanup of aside bundles left by an interrupted install.
+  /// Runs at each `SunshineUpdater` init, so failed or aborted updates do not accumulate
+  /// disk usage.
   static func sweepStaleAsideBundles(
     near installURL: URL, olderThan interval: TimeInterval = 24 * 60 * 60
   ) {

@@ -1,11 +1,11 @@
 import Sunshine
 import SwiftUI
 
-/// Lets you inspect and reset the `UserDefaults` state `SunshineUpdater` persists (skipped
-/// version, remind-later date, preferences) and tweak the example app's simulated "latest
-/// release". This is useful because those defaults otherwise silently survive between runs and can
-/// make an update look "stuck" (e.g. `UpdateIndicatorView` never appearing again after you
-/// once tap "Skip This Version").
+/// Screen to inspect and reset the `UserDefaults` state of `SunshineUpdater` and to adjust
+/// the simulated "latest release".
+/// The state includes the skipped version, the remind later date, and preferences. It
+/// persists between runs and can make an update look stuck. For example,
+/// `UpdateIndicatorView` does not appear again after a tap on "Skip This Version".
 struct ExampleConfigurationView: View {
   @ObservedObject var controller: SunshineUpdaterUIController
   let appliedReleaseConfig: ExampleReleaseConfig

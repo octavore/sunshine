@@ -19,20 +19,21 @@ public struct UpdateAvailableView: View {
   }
 }
 
-/// The update-review UI (version delta, release notes, and the install / skip /
-/// remind actions, or install progress) without any outer padding or fixed
-/// width, so it fits both `UpdateAvailableView`'s sheet and an inline spot in a
-/// settings pane.
+/// Update review UI with version delta, release notes, and the install, skip, and remind
+/// actions, or install progress.
+/// It has no outer padding or fixed width, so it fits the `UpdateAvailableView` sheet and
+/// an inline position in a settings pane.
 struct UpdateReviewContent: View {
   @ObservedObject var controller: SunshineUpdaterUIController
   let appName: String
   let appIcon: Image?
-  /// Whether to draw the app icon and name. Off when the host already shows
-  /// app identity above this view (the settings pane), so it isn't repeated.
+  /// Whether to draw the app icon and name.
+  /// It is off if the host already shows app identity above this view, as the settings
+  /// pane does.
   var showsAppIdentity: Bool = true
-  /// Whether to offer "Skip This Version" and "Remind Me Later" alongside
-  /// "Install & Relaunch". Off in the settings pane, where the user navigated
-  /// here to act and a skip is undone by the next Check Now anyway.
+  /// Whether to offer "Skip This Version" and "Remind Me Later" with "Install & Relaunch".
+  /// It is off in the settings pane. The user opened the pane to act, and the next Check
+  /// Now reverses a skip.
   var showsDismissActions: Bool = true
 
   var body: some View {
@@ -80,8 +81,8 @@ struct UpdateReviewContent: View {
             }
             .progressViewStyle(.linear)
           }
-          // Only the download is cancellable; the button goes away once
-          // verification starts rather than sitting there doing nothing.
+          // Only the download is cancellable. The button is removed once verification
+          // starts.
           if controller.isDownloading {
             HStack {
               Spacer()

@@ -1,8 +1,8 @@
 import Foundation
 
 enum ReleaseNotesRenderer {
-  /// Returns `nil` when there is nothing to render. Callers should hide the release-notes box
-  /// in that case instead of showing an empty or placeholder state.
+  /// Render markdown release notes.
+  /// Returns `nil` if there is nothing to render. Callers hide the release notes box then.
   static func render(_ markdown: String?) -> AttributedString? {
     guard let markdown, !markdown.isEmpty else { return nil }
     guard
@@ -14,9 +14,10 @@ enum ReleaseNotesRenderer {
     return insertingBlockBreaks(parsed)
   }
 
-  /// `AttributedString(markdown:)` records block structure (headings, list items, paragraphs)
-  /// as `PresentationIntent` attributes rather than literal newlines. A single SwiftUI `Text`
-  /// only renders inline styling, so without this pass every block runs together on one line.
+  /// Insert newlines between blocks.
+  /// `AttributedString(markdown:)` records block structure (headings, list items,
+  /// paragraphs) as `PresentationIntent` attributes and not as newlines. A SwiftUI `Text`
+  /// renders only inline styling. Without this pass, all blocks appear on one line.
   private static func insertingBlockBreaks(_ input: AttributedString) -> AttributedString {
     var result = AttributedString()
     var previousIdentity: Int? = nil
@@ -40,8 +41,9 @@ enum ReleaseNotesRenderer {
     return result
   }
 
-  /// List items carry no literal bullet or number; `PresentationIntent` only records the
-  /// ordinal and list kind. Build the marker text ourselves, indenting for nested lists.
+  /// Marker text for a list item.
+  /// List items have no bullet or number. `PresentationIntent` records only the ordinal and
+  /// list kind. Nested lists are indented.
   private static func marker(
     for listItemComponent: PresentationIntent.IntentType,
     in components: [PresentationIntent.IntentType]

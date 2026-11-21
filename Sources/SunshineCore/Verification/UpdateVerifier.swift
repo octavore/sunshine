@@ -1,9 +1,9 @@
 import Foundation
 
-/// Verifies a downloaded update's authenticity using macOS code signing and notarization
-/// instead of a separate signing key: the update must be signed by the same Team ID as
-/// the running app, and (by default) pass Gatekeeper's notarization check. Every check
-/// fails closed: an error or indeterminate result is treated as rejection.
+/// Verifier of downloaded update authenticity using macOS code signing and notarization.
+/// There is no separate signing key. The same Team ID as the running app must sign the
+/// update, and by default the update must pass Gatekeeper's notarization check. An error
+/// or indeterminate result rejects the update.
 public struct UpdateVerifier: Sendable {
   public var requireNotarization: Bool
   var checker: any CodeSigningChecking

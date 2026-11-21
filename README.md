@@ -1,6 +1,6 @@
 # Sunshine
 
-Auto-update library for macOS apps distributed via GitHub Releases. Updates are verified using macOS code signing and notarization. Updates are installed only if they are signed by the same Developer ID Team as the current version.
+Auto-update library for macOS apps distributed via GitHub Releases. Sunshine verifies updates using macOS code signing and notarization. Sunshine installs an update only if the same Developer ID Team signed both the update and the current version.
 
 <p align="center">
   <img src="docs/screenshot.png" alt="Sunshine update settings pane" width="420">
@@ -25,7 +25,7 @@ Add Sunshine as a Swift Package dependency:
 Two products are available:
 
 - `Sunshine`: core engine plus the SwiftUI update UI. `import Sunshine` exposes both `SunshineCore` and `SunshineUI`.
-- `SunshineCore`: core engine only, no SwiftUI/AppKit dependency.
+- `SunshineCore`: core engine only, without a SwiftUI or AppKit dependency.
 
 ## Publishing releases
 
@@ -37,18 +37,18 @@ Sunshine compares the release tag against the running app's `CFBundleShortVersio
 - A prerelease tail ranks below the same version without one (`1.4.2-beta.1` < `1.4.2`). Numeric identifiers compare numerically and rank below alphanumeric ones.
 - Build metadata after `+` is ignored.
 
-An update is offered only if the tag is strictly newer than the running version. If either version fails to parse (for example a non-numeric component), no update is offered.
+An update is offered only if the tag is strictly newer than the running version. If either version fails to parse (for example a non-numeric component), Sunshine does not offer an update.
 
 ### Assets
 
-Assets are filtered by architecture before anything else. Name release assets so they contain `arm64`, `apple-silicon`, or `universal`, or omit an architecture entirely if you only publish one build:
+Assets are filtered by architecture before anything else. Give release assets filenames that contain `arm64`, `apple-silicon`, or `universal`, or omit an architecture entirely if you only publish one build:
 
 ```text
 MyApp-1.4.2-arm64.zip
 MyApp-1.4.2-universal.dmg
 ```
 
-Assets naming `x86_64`, `x86-64`, `x64`, or `intel` as a whole word are excluded. The remaining assets are passed to the configured `assetMatcher` (see [Asset matching](#asset-matching)).
+Sunshine excludes assets whose filenames contain `x86_64`, `x86-64`, `x64`, or `intel` as a whole word. The remaining assets are passed to the configured `assetMatcher` (see [Asset matching](#asset-matching)).
 
 ## Required startup hook
 
@@ -63,7 +63,7 @@ func applicationDidFinishLaunching(_ notification: Notification) {
 }
 ```
 
-If this is omitted, Sunshine falls back to checking whether the new bundle's executable is running, which is a weaker signal of relaunch success.
+If you omit this, Sunshine falls back to checking whether the new bundle's executable is running, which is a weaker signal of relaunch success.
 
 `SunshineUpdater`'s initializer calls this for you, so wiring it explicitly only matters if you construct the updater lazily rather than at launch.
 
@@ -79,7 +79,7 @@ func applicationDidFinishLaunching(_ notification: Notification) {
 }
 ```
 
-This does nothing in a suitable location. Otherwise it shows an alert with "Move to Applications" and "Don't Move" buttons, and a checkbox to stop asking.
+This returns immediately in a suitable location. Otherwise it shows an alert with "Move to Applications" and "Don't Move" buttons, and a checkbox to stop asking.
 
 Headless:
 
@@ -90,7 +90,7 @@ if updater.shouldOfferMoveToApplications {
 }
 ```
 
-The app is copied to `/Applications`, or to `~/Applications` if that is not writable. An existing bundle with the same name is moved to the trash. Sunshine removes the quarantine attribute from the copy, launches it, and terminates the current process. The original bundle is left in place. If the move fails, the original keeps running and the call throws `SunshineError.moveToApplicationsFailed`.
+Sunshine copies the app to `/Applications`, or to `~/Applications` if `/Applications` is not writable. It moves an existing bundle with the same name to the trash, removes the quarantine attribute from the copy, launches the copy, and terminates the current process. It leaves the original bundle in place. If the move fails, the original app continues to run and the call throws `SunshineError.moveToApplicationsFailed`.
 
 If the app does not move, `install()` throws `SunshineError.installLocationUnsuitable` instead of a generic permissions error.
 
@@ -104,7 +104,7 @@ Sunshine can post native macOS notifications (`UNUserNotificationCenter`) for th
 | "\<App\> update available" | `notifyOnUpdateAvailable`  | A background check (`checkInterval` set) finds an update and `automationLevel` is `.manual`, so nothing downloads on its own |
 | "\<App\> update failed"    | `notifyOnUpdateFailure`    | An unattended download, verification, or install triggered by the background loop fails                                      |
 
-Each requests notification authorization on first use; if it was never granted, or the user declines, the notification is silently skipped. Only the background check loop triggers the "available" and "failed" notifications — a check or install the user triggers directly (e.g. "Check for Updates…") does not, since the UI is already on screen in that case.
+Each requests notification authorization on first use. If the user never granted it or declines, Sunshine skips the notification silently. Only the background check loop triggers the "available" and "failed" notifications. A check or install the user triggers directly (e.g. "Check for Updates…") does not, since the UI is already on screen in that case.
 
 ```swift
 SunshineConfiguration(
@@ -148,7 +148,7 @@ struct MyApp: App {
 
 ### Less obtrusive: corner indicator
 
-Pass `style: .cornerIndicator` to replace the auto-popping sheet with a small badge pinned to the window's bottom-trailing corner. It only appears when there's something to show (an update or an error) and stays out of the way until the user opens it.
+Pass `style: .cornerIndicator` to replace the automatic sheet with a small badge placed at the window's bottom-trailing corner. It appears only when there is something to show (an update or an error) and remains hidden otherwise.
 
 ```swift
 .sunshineUpdater(updaterUI, style: .cornerIndicator)
@@ -166,9 +166,9 @@ Settings {
 }
 ```
 
-Its toggles read and write live settings on `SunshineUpdater` (`isAutomaticallyCheckingForUpdates`, `automationLevel`, `allowPrereleases`), which persist to `UserDefaults` per bundle identifier and take effect immediately, with no relaunch or extra wiring required. The Install Updates Automatically toggle switches between `.manual` and `.autoDownloadAndInstall`. Pass `showChannelPicker: false` to hide the prerelease picker.
+Its toggles read and write live settings on `SunshineUpdater` (`isAutomaticallyCheckingForUpdates`, `automationLevel`, `allowPrereleases`), which persist to `UserDefaults` per bundle identifier and take effect immediately, without a relaunch or extra wiring. The Install Updates Automatically toggle switches between `.manual` and `.autoDownloadAndInstall`. Pass `showChannelPicker: false` to hide the prerelease picker.
 
-Check Now routes through `controller.refreshUpdateStatus()`, so a version the user previously skipped or deferred is resurfaced here rather than reported as "up to date". While the pane is on screen it sets `controller.suppressesUpdateSheet`, so an update it finds shows in the pane and does not also pop as a sheet from `.sunshineUpdater` on another window. The "Check for Updates…" menu command is unaffected when the pane is closed.
+Check Now routes through `controller.refreshUpdateStatus()`, so a version the user previously skipped or deferred is shown again here rather than reported as "up to date". While the pane is on screen it sets `controller.suppressesUpdateSheet`, so an update it finds shows in the pane and does not also open as a sheet from `.sunshineUpdater` on another window. The "Check for Updates…" menu command is unaffected when the pane is closed.
 
 ### Building your own UI
 
@@ -214,9 +214,9 @@ for await event in updater.events {
 
 ### The event stream has a single consumer
 
-`updater.events` is one `AsyncStream` shared by every reader of the property, not a broadcast. Each event goes to exactly one waiting loop, so two `for await` loops split the events between them. Iterate it from exactly one place. Use `SunshineUpdaterDelegate` when more than one part of the app needs to observe.
+`updater.events` is one `AsyncStream` shared by every reader of the property, rather than a broadcast. Each event goes to exactly one waiting loop, so two `for await` loops split the events between them. Iterate it from exactly one place. Use `SunshineUpdaterDelegate` when more than one part of the app needs to observe.
 
-The stream is live from `init`, so events emitted before anything starts iterating are buffered rather than dropped. This matters when `checkInterval` is set, because the first check can run before the host subscribes. The buffer holds the newest `SunshineUpdater.eventBufferSize` events (256) and then discards the oldest, so a consumer that stops iterating cannot grow it without bound. The stream finishes when the updater is deallocated.
+The stream starts at `init`, so events emitted before anything starts iterating are buffered rather than dropped. This matters when `checkInterval` is set, because the first check can run before the host subscribes. The buffer holds the newest `SunshineUpdater.eventBufferSize` events (256) and then discards the oldest, so the buffer stays bounded if a consumer stops iterating. The stream finishes when the updater is deallocated.
 
 ### Delegate
 
@@ -230,7 +230,7 @@ Set `updater.delegate` to an object conforming to `SunshineUpdaterDelegate`. The
 
 ### Cancelling a download
 
-`updater.cancelDownload()` stops a download in flight. `download(_:)` then throws `SunshineError.cancelled` and the state returns to `.updateAvailable`, so the user can start it again. `isDownloadCancellable` reports whether a download is running. Verification and install are deliberately not cancellable: both are short, and abandoning a bundle swap partway is worse than finishing it. The built-in sheet shows a Cancel button for the download phase only, wired to `controller.cancelDownloadTapped()`.
+`updater.cancelDownload()` stops a download in flight. `download(_:)` then throws `SunshineError.cancelled` and the state returns to `.updateAvailable`, so the user can start it again. `isDownloadCancellable` reports whether a download is running. Verification and install are deliberately not cancellable: both are short, and abandoning a bundle swap partway is worse than finishing it. The built-in sheet shows a Cancel button for the download phase only, which calls `controller.cancelDownloadTapped()`.
 
 ### Skip and remind later
 
@@ -278,8 +278,8 @@ let updater = SunshineUpdater(
 | `owner`, `repo`            | (required)                 | GitHub repository to check for releases                                                                                      |
 | `allowPrereleases`         | `false`                    | Consider releases marked "prerelease"                                                                                        |
 | `assetMatcher`             | `.zipOrDmgContainingApp()` | How to pick an asset from a release (see [Asset matching](#asset-matching))                                                  |
-| `githubToken`              | `nil`                      | Raises the API rate limit from 60/hr to 5000/hr; recommended if checking more than hourly                                    |
-| `checkInterval`            | `nil`                      | Seconds between automatic background checks; `nil` disables automatic checking                                               |
+| `githubToken`              | `nil`                      | Raises the API rate limit from 60/hr to 5000/hr. Recommended if checking more than hourly                                    |
+| `checkInterval`            | `nil`                      | Seconds between automatic background checks. `nil` disables automatic checking                                               |
 | `installLocation`          | `nil`                      | Overrides the install path; defaults to `Bundle.main.bundleURL`                                                              |
 | `requireNotarization`      | `true`                     | Also require a passing Gatekeeper/notarization check, not just a Team ID match                                               |
 | `automationLevel`          | `.manual`                  | `.manual` (prompt only), `.autoDownload` (auto-download, prompt to install), or `.autoDownloadAndInstall` (fully silent)     |
@@ -299,11 +299,11 @@ With `allowPrereleases` off, a check fetches GitHub's "latest release", which ex
 
 `AssetMatching` is applied after the architecture filter:
 
-| Case                                  | Selects                                                                                                                                                             |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `.zipOrDmgContainingApp(bundleName:)` | The first `.zip` or `.dmg` asset whose name contains `bundleName` (case-insensitive; defaults to the running app's `CFBundleName`), else the first `.zip` or `.dmg` |
-| `.regex(String)`                      | The first asset whose name matches the pattern. An invalid pattern matches nothing.                                                                                 |
-| `.custom((GitHubAsset) -> Bool)`      | The first asset for which the closure returns `true`                                                                                                                |
+| Case                                  | Selects                                                                                                                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.zipOrDmgContainingApp(bundleName:)` | The first `.zip` or `.dmg` asset whose name contains `bundleName` (case-insensitive, defaulting to the running app's `CFBundleName`), else the first `.zip` or `.dmg` |
+| `.regex(String)`                      | The first asset whose name matches the pattern. An invalid pattern does not match any asset.                                                                          |
+| `.custom((GitHubAsset) -> Bool)`      | The first asset for which the closure returns `true`                                                                                                                  |
 
 If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `AssetMatcher.select(from:matching:bundleName:)` runs the same selection directly.
 
@@ -351,16 +351,16 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 
 #### `UpdateEvent`
 
-| Case                                                               | Emitted when                                                               |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `.checkStarted`                                                    | A check begins                                                             |
-| `.checkFinished(UpdateCheckResult)`                                | A check ends                                                               |
-| `.downloadProgress(fractionComplete:bytesWritten:bytesTotal:)`     | Download progress changes                                                  |
-| `.verificationStarted`                                             | Verification begins                                                        |
-| `.verificationFinished(Result<VerificationReport, SunshineError>)` | Verification ends                                                          |
-| `.installStarted`                                                  | `install(_:)` begins                                                       |
-| `.willRelaunch`                                                    | The relaunch script is waiting and the process is about to terminate       |
-| `.installFailed(SunshineError)`                                    | Install failed before the swap, or was aborted. Nothing on disk was moved. |
+| Case                                                               | Emitted when                                                                    |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| `.checkStarted`                                                    | A check begins                                                                  |
+| `.checkFinished(UpdateCheckResult)`                                | A check ends                                                                    |
+| `.downloadProgress(fractionComplete:bytesWritten:bytesTotal:)`     | Download progress changes                                                       |
+| `.verificationStarted`                                             | Verification begins                                                             |
+| `.verificationFinished(Result<VerificationReport, SunshineError>)` | Verification ends                                                               |
+| `.installStarted`                                                  | `install(_:)` begins                                                            |
+| `.willRelaunch`                                                    | The relaunch script is waiting and the process is about to terminate            |
+| `.installFailed(SunshineError)`                                    | Install failed before the swap, or was aborted. The installed app is unchanged. |
 
 #### `SunshineError`
 
@@ -420,7 +420,7 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 
 #### `SunshineUpdaterUIController`
 
-`@MainActor ObservableObject` that drives the built-in views. `init(updater:)` subscribes to `updater.state` and sets `updater.terminate` to `NSApp.terminate(nil)`.
+`@MainActor ObservableObject` that supplies state to the built-in views. `init(updater:)` subscribes to `updater.state` and sets `updater.terminate` to `NSApp.terminate(nil)`.
 
 | Member                                                             | Description                                                                                               |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -457,16 +457,16 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 ## How verification and install work
 
 1. Check: fetch the candidate release (see [Release selection](#release-selection)) and compare its tag against the running app's version. An update is available only if the candidate version is strictly newer than the running version.
-2. Download: `URLSession` streams the asset to a system temporary file, which is then moved into a per-app cache directory: `~/Library/Caches/<bundleIdentifier>/Sunshine/updates/<releaseTag>/<assetName>`. Extraction happens in an `extracted/` folder alongside it. This directory is left in place after install.
+2. Download: `URLSession` streams the asset to a system temporary file, which Sunshine then moves into a per-app cache directory: `~/Library/Caches/<bundleIdentifier>/Sunshine/updates/<releaseTag>/<assetName>`. Extraction happens in an `extracted/` folder alongside it. Sunshine leaves this directory in place after install.
 3. Verify: extract the `.app`, check its code signature is valid, and check its Team ID matches the currently running app's Team ID (read live via `SecCodeCopySelf`, not from cached config). If `requireNotarization` is set, also check notarization/Gatekeeper acceptance. Any failure here rejects the update.
-4. Install: check the install location is writable, verify the bundle again, clear its quarantine flag, write a breadcrumb file recording the pending swap, and spawn a detached `/bin/sh` script. The app then terminates itself through `updater.terminate`. `SunshineUI` uses `NSApp.terminate(nil)`, so the app delegate, autosave, and any unsaved-changes prompt all run; headless callers get `exit(0)`.
+4. Install: check the install location is writable, verify the bundle again, clear its quarantine flag, write a breadcrumb file recording the pending swap, and spawn a detached `/bin/sh` script. The app then terminates itself through `updater.terminate`. `SunshineUI` uses `NSApp.terminate(nil)`, so the app delegate, autosave, and any unsaved-changes prompt all run. Headless callers get `exit(0)`.
 5. Swap: once the host process is gone, the script moves the old bundle aside, moves the new bundle into place, relaunches it, and waits for the sentinel file the new process writes at startup. On confirmation it deletes the old bundle and itself. If the relaunch is never confirmed, it deletes the new bundle, restores the old one, and reopens it.
 
-Nothing on disk moves while the app is still running. The script waits for the host process with no timeout, so a host that never exits means the update does not happen. The script never swaps the bundle under a live process. If termination is refused (`applicationShouldTerminate` returning `.terminateCancel`, or a user dismissing a save prompt), call `updater.abortPendingInstall()` to stand the script down; `install()` does this on its own 20 seconds after asking the process to terminate.
+The installed app stays unchanged until the host exits. The script waits for the host process with no timeout, so a host that never exits means the update does not happen. If termination is refused (`applicationShouldTerminate` returning `.terminateCancel`, or a user dismissing a save prompt), call `updater.abortPendingInstall()` to stand the script down. `install()` does this on its own 20 seconds after asking the process to terminate.
 
 That signal only applies while the app is alive. Once the process exits the script proceeds regardless, so an app that takes a long time in a save dialog and then quits still gets the update rather than silently coming back on the old version.
 
-Because the swap happens after this process exits, its outcome cannot be reported through `events` or the delegate. Only failures raised before the script is spawned surface as `.installFailed`. The script logs to `~/Library/Caches/<bundleIdentifier>/Sunshine/relaunch.log`.
+Because the swap happens after this process exits, Sunshine cannot report its outcome through `events` or the delegate. Only failures raised before the script is spawned surface as `.installFailed`. The script logs to `~/Library/Caches/<bundleIdentifier>/Sunshine/relaunch.log`.
 
 `install()` requires the install location to be writable by the current user. There is no privileged-helper fallback: if the location isn't writable, `install()` throws `SunshineError.installLocationNotWritable`. If the app runs from a translocated path or a read-only volume, it throws `SunshineError.installLocationUnsuitable` instead (see [Moving to the Applications folder](#moving-to-the-applications-folder)). The built-in error view links to the release page for a manual download.
 
@@ -474,7 +474,7 @@ If the script itself dies mid-swap, the breadcrumb file lets the next `SunshineU
 
 ## Example app
 
-`Examples/SunshineExample` is a separate package containing a small SwiftUI app that showcases every view `SunshineUI` provides (`SunshineUpdateSettingsView`, `UpdateAvailableView`, `UpdateIndicatorView`, `UpdateErrorView`, and `DownloadProgressView`), picked from a sidebar. It runs against a fixed, in-memory list of releases via `StaticReleasesProvider`, so it never hits the network.
+`Examples/SunshineExample` is a separate package containing a small SwiftUI app that showcases every view `SunshineUI` provides (`SunshineUpdateSettingsView`, `UpdateAvailableView`, `UpdateIndicatorView`, `UpdateErrorView`, and `DownloadProgressView`), picked from a sidebar. It runs against a fixed, in-memory list of releases via `StaticReleasesProvider`, so it works offline.
 
 The "Notifications" screen exercises all three [system notifications](#system-notifications): a button simulates a successful relaunch, and the Settings screen's automatic-check toggle exercises the "available" (manual automation) and "failed" (auto-download automation against the example's fake, 404ing asset URL) notifications. This screen requires running via `strudel run`, since `UNUserNotificationCenter` needs a real, signed `.app` bundle with a bundle identifier.
 

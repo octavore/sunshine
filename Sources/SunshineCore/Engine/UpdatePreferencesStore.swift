@@ -1,7 +1,7 @@
 import Foundation
 
-/// Persists the user's updater preferences (auto-check, auto-install, prerelease channel)
-/// across launches, keyed per host app. Mirrors `SkipAndRemindStore`'s per-bundle scoping.
+/// Persisted updater preferences for auto-check, auto-install, and prerelease channel.
+/// Keys are scoped per bundle identifier, as in `SkipAndRemindStore`.
 final class UpdatePreferencesStore {
   private let defaults: UserDefaults
   private let keyPrefix: String

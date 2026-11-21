@@ -1,8 +1,8 @@
 import Foundation
 
-/// Anything that can produce GitHub release data for `SunshineUpdater`. `GitHubReleasesClient`
-/// is the production conformer; `StaticReleasesProvider` supplies a fixed list instead, for
-/// SwiftUI previews, examples, and tests that shouldn't hit the network.
+/// Source of GitHub release data for `SunshineUpdater`.
+/// `GitHubReleasesClient` is the production conformer. `StaticReleasesProvider` supplies a
+/// fixed list for SwiftUI previews, examples, and tests that must not use the network.
 public protocol ReleasesProviding: Sendable {
   func fetchLatestRelease(owner: String, repo: String) async throws -> GitHubRelease
   func fetchRecentReleases(owner: String, repo: String) async throws -> [GitHubRelease]
@@ -14,9 +14,9 @@ extension GitHubReleasesClient: ReleasesProviding {
   }
 }
 
-/// A `ReleasesProviding` conformer backed by an explicit, fixed list of releases, with no network
-/// access. Pass one to `SunshineUpdater.init(configuration:releasesProvider:)` to drive
-/// previews, examples, or tests against known release data.
+/// `ReleasesProviding` conformer backed by a fixed list of releases, without network access.
+/// Pass one to `SunshineUpdater.init(configuration:releasesProvider:)` to run previews,
+/// examples, or tests against known release data.
 public struct StaticReleasesProvider: ReleasesProviding {
   public var releases: [GitHubRelease]
 

@@ -45,8 +45,8 @@ import Testing
     #expect(match == nil)
   }
 
-  /// Assets that name a supported architecture or no architecture are accepted, and
-  /// assets that name an Intel architecture are rejected.
+  /// Assets with a supported architecture or no architecture are accepted.
+  /// Assets that name an Intel architecture are rejected.
   @Test func namedAndUnnamedArchitecturesAreBothAccepted() {
     for name in ["MyApp-arm64.zip", "MyApp-universal.zip", "MyApp-apple-silicon.zip", "MyApp.zip"] {
       let match = AssetMatcher.select(
@@ -63,7 +63,7 @@ import Testing
     }
   }
 
-  /// Excluded tokens match whole words, not substrings of the app name.
+  /// Excluded tokens match whole words. They do not match substrings of the app name.
   @Test func excludedTokensInsideWordsAreIgnored() {
     for name in ["IntelliNote-1.0.zip", "Max64-1.0.zip", "Linux64Tools.zip"] {
       let match = AssetMatcher.select(

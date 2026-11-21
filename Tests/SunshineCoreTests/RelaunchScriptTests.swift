@@ -3,11 +3,11 @@ import Testing
 
 @testable import SunshineCore
 
-/// Runs the real relaunch script under `/bin/sh` against fake bundles, with `open` and
-/// `pgrep` replaced by stubs. The script owns the swap, the relaunch handshake, and the
-/// rollback, so this is where that behaviour is covered.
+/// Tests that run the real relaunch script under `/bin/sh` against fake bundles.
+/// Stubs replace `open` and `pgrep`. The script performs the swap, the relaunch
+/// handshake, and the rollback. These tests cover that behavior.
 @Suite struct RelaunchScriptTests {
-  /// The temp layout every test works in, plus the stubs the script calls out to.
+  /// Temporary layout used by every test, with the stubs the script calls.
   private struct Fixture {
     let root: URL
     let scriptURL: URL
@@ -32,8 +32,8 @@ import Testing
     func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
   }
 
-  /// - Parameter relaunchSucceeds: whether the stubbed `open` writes the sentinel the
-  ///   script waits for, i.e. whether the new bundle "confirmed" its launch.
+  /// - Parameter relaunchSucceeds: Whether the stubbed `open` writes the sentinel the
+  ///   script waits for. This is whether the new bundle confirmed its launch.
   private func makeFixture(relaunchSucceeds: Bool) throws -> Fixture {
     let fileManager = FileManager.default
     let root = fileManager.temporaryDirectory.appendingPathComponent(
@@ -62,7 +62,7 @@ import Testing
     \(touchSentinel)exit 0
     """.write(to: openStub, atomically: true, encoding: .utf8)
 
-    // Always "no matching process", so the fallback never rescues a failed handshake.
+    // Always reports no matching process. The fallback never accepts a failed handshake.
     let pgrepStub = root.appendingPathComponent("pgrep-stub.sh")
     try "#!/bin/sh\nexit 1\n".write(to: pgrepStub, atomically: true, encoding: .utf8)
 
@@ -87,8 +87,8 @@ import Testing
     )
   }
 
-  /// - Parameter installPathOverride: substituted for the real install path, to exercise
-  ///   the script's absolute-path guard.
+  /// - Parameter installPathOverride: Replaces the real install path to exercise the
+  ///   absolute path guard of the script.
   @discardableResult
   private func run(
     _ fixture: Fixture,
@@ -113,8 +113,8 @@ import Testing
     )
 
     var arguments = plan.arguments
-    // `URL(fileURLWithPath:)` normalizes away the malformed paths the guard exists to
-    // reject, so the override is substituted after the plan is built.
+    // `URL(fileURLWithPath:)` normalizes the malformed paths that the guard rejects.
+    // Substitute the override after the plan is built.
     if let installPathOverride {
       arguments[2] = installPathOverride
     }
@@ -122,7 +122,7 @@ import Testing
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/sh")
     process.arguments = arguments
-    // Deliberately hostile: the script must not take any of these into account.
+    // Hostile values. The script must ignore all of them.
     process.environment = [
       "PATH": "/nonexistent",
       "SUNSHINE_OPEN": "/bin/echo",
@@ -150,7 +150,7 @@ import Testing
     #expect(!fixture.exists(fixture.asideURL))
     #expect(!fixture.exists(fixture.stagedURL))
     #expect(!fixture.exists(fixture.markerURL))
-    #expect(!fixture.exists(fixture.scriptURL))  // deletes itself
+    #expect(!fixture.exists(fixture.scriptURL))  // The script deletes itself.
     #expect(fixture.openInvocations.count == 1)
     #expect(fixture.openInvocations[0].contains("--sunshine-relaunched-from=v1.1.0"))
   }
@@ -166,7 +166,7 @@ import Testing
     #expect(fixture.read(fixture.installURL) == "OLD")
     #expect(!fixture.exists(fixture.asideURL))
     #expect(!fixture.exists(fixture.markerURL))
-    // Once to launch the new bundle, once to bring the restored one back up.
+    // One call launches the new bundle. One call launches the restored bundle.
     #expect(fixture.openInvocations.count == 2)
     #expect(!fixture.openInvocations[1].contains("--sunshine-relaunched-from"))
   }
@@ -193,9 +193,9 @@ import Testing
     #expect(fixture.openInvocations.isEmpty)
   }
 
-  /// A host that asks to cancel and then quits anyway has, by quitting, chosen the
-  /// update. Honouring a stale abort file here would drop the user back on the old
-  /// version with no explanation.
+  /// A host that asks to cancel and then quits anyway has chosen the update by quitting.
+  /// Honoring a stale abort file would leave the user on the old version without
+  /// explanation.
   @Test func abortFileIsIgnoredOnceTheHostHasExited() throws {
     let fixture = try makeFixture(relaunchSucceeds: true)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -223,8 +223,8 @@ import Testing
     #expect(fixture.openInvocations.isEmpty)
   }
 
-  /// `run` sets SUNSHINE_OPEN to /bin/echo, which would write no sentinel and leave no
-  /// entry in the open log. A committed swap proves the stub from the plan ran instead.
+  /// `run` sets SUNSHINE_OPEN to /bin/echo. That command writes no sentinel and no entry
+  /// in the open log. A committed swap shows that the stub from the plan ran.
   @Test func environmentVariablesCannotRedirectTheCommandsTheScriptRuns() throws {
     let fixture = try makeFixture(relaunchSucceeds: true)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -263,7 +263,7 @@ import Testing
     host.waitUntilExit()
 
     #expect(status == 0)
-    #expect(Date().timeIntervalSince(started) >= 0.9)  // did not swap early
+    #expect(Date().timeIntervalSince(started) >= 0.9)  // The swap did not start early.
     #expect(fixture.read(fixture.installURL) == "NEW")
   }
 }
