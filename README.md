@@ -81,6 +81,26 @@ func applicationDidFinishLaunching(_ notification: Notification) {
 
 This returns immediately in a suitable location. Otherwise it shows an alert with "Move to Applications" and "Don't Move" buttons, and a checkbox to stop asking.
 
+If a bundle with the same name already exists in the destination, a second alert asks whether to replace it. Cancelling leaves the current app running where it is.
+
+Options:
+
+| Parameter              | Default | Effect                                                                                      |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `allowsSuppression`    | `true`  | Shows the "do not ask again" checkbox. If `false`, the alert appears on every call.         |
+| `confirmsReplacement`  | `true`  | Asks before an existing copy is replaced. If `false`, the copy is replaced without asking.  |
+| `quitTimeout`          | `5`     | Seconds to wait for running instances of the existing copy to quit before a force terminate |
+| `text`                 | default | A `MoveToApplicationsText` with the titles, messages, and button labels of the alerts       |
+
+```swift
+var text = MoveToApplicationsText()
+text.replaceTitle = { app, folder in "Replace \(app) in \(folder)?" }
+text.replaceButton = "Replace and Relaunch"
+controller.offerToMoveToApplicationsIfNeeded(confirmsReplacement: true, text: text)
+```
+
+`MoveToApplicationsText` has `offerTitle`, `offerMessage`, `moveButton`, `dontMoveButton`, `replaceTitle`, `replaceMessage`, `replaceButton`, `cancelReplaceButton`, and `failureTitle`. `replaceTitle` is a closure that receives the app name and the folder name.
+
 Headless:
 
 ```swift
@@ -90,7 +110,9 @@ if updater.shouldOfferMoveToApplications {
 }
 ```
 
-Sunshine copies the app to `/Applications`, or to `~/Applications` if `/Applications` is not writable. It moves an existing bundle with the same name to the trash, removes the quarantine attribute from the copy, launches the copy, and terminates the current process. It leaves the original bundle in place. If the move fails, the original app continues to run and the call throws `SunshineError.moveToApplicationsFailed`.
+Use `updater.existingCopyInApplications` to find the bundle that would be replaced, for your own confirmation. It is `nil` if there is none.
+
+Sunshine copies the app to `/Applications`, or to `~/Applications` if `/Applications` is not writable. If a bundle with the same name exists there, Sunshine first quits any instance running from it. Each instance gets `terminate()`, then `forceTerminate()` after `quitTimeout` seconds (a parameter of `moveToApplicationsAndRelaunch(quitTimeout:)`, default 5). Sunshine then moves the existing bundle to the trash, removes the quarantine attribute from the copy, launches the copy, and terminates the current process. It leaves the original bundle in place. If the move fails, the original app continues to run and the call throws `SunshineError.moveToApplicationsFailed`.
 
 If the app does not move, `install()` throws `SunshineError.installLocationUnsuitable` instead of a generic permissions error.
 
@@ -329,7 +351,8 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 | `install(_:) async throws`                                                 | Stages the swap and terminates the process                                                                                                                                                                                                      |
 | `abortPendingInstall()`                                                    | Stands down a spawned relaunch script if termination was refused                                                                                                                                                                                |
 | `shouldOfferMoveToApplications`                                            | `true` if the app is translocated, on a read-only volume, or in an unwritable folder                                                                                                                                                            |
-| `moveToApplicationsAndRelaunch() throws`                                   | Copies the app to the Applications folder, launches the copy, and terminates the process                                                                                                                                                        |
+| `existingCopyInApplications`                                               | The bundle `moveToApplicationsAndRelaunch()` would replace, or `nil`                                                                                                                                                                            |
+| `moveToApplicationsAndRelaunch(quitTimeout:) throws`                       | Quits running instances of an existing copy, copies the app to the Applications folder, launches the copy, and terminates the process                                                                                                           |
 | `checkDownloadVerifyAndInstall(silently:) async throws`                    | Runs the whole pipeline                                                                                                                                                                                                                         |
 | `skip(_:)`, `remindLater(_:for:)`, `clearSkippedVersion()`                 | Records or clears a skip or deferral                                                                                                                                                                                                            |
 | `skippedVersion`, `isRemindingLater`, `remindLaterVersion`                 | Read-only skip and deferral state                                                                                                                                                                                                               |
@@ -432,7 +455,7 @@ If nothing matches, the check fails with `SunshineError.noMatchingAsset`. `Asset
 | `isInstalling`, `isDownloading`, `progress`, `statusText`          | Progress state from Install & Relaunch until the process exits                                            |
 | `updateUIStyle`                                                    | Set by `.sunshineUpdater(style:)`. The sheet opens automatically only for `.sheet`.                       |
 | `suppressesUpdateSheet`                                            | While `true`, found updates and errors populate state without opening the sheet                           |
-| `offerToMoveToApplicationsIfNeeded()`                              | Asks to move the app to the Applications folder if it cannot update itself where it is                    |
+| `offerToMoveToApplicationsIfNeeded(...)`                           | Asks to move the app to the Applications folder if it cannot update itself where it is                    |
 | `checkForUpdatesButtonTapped()`                                    | Runs a check and shows the sheet or the "up to date" alert                                                |
 | `refreshUpdateStatus() async -> UpdateCheckResult`                 | Runs a check without presenting anything, and surfaces a skipped or deferred update as `pendingUpdate`    |
 | `viewSkippedUpdateTapped()`                                        | Clears the skip and shows `skippedUpdate` in the sheet                                                    |
