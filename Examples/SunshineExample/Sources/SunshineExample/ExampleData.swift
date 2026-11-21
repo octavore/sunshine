@@ -15,6 +15,8 @@ struct ExampleReleaseConfig: Hashable {
   var isPrerelease: Bool = false
   /// Make every release fetch fail, so the error state can be shown.
   var simulatesError: Bool = false
+  /// Points the updater at a fake App Translocation path, so the move offer applies.
+  var simulatesUnsuitableLocation: Bool = false
 }
 
 /// `ReleasesProviding` conformer whose fetches always fail.
@@ -35,6 +37,10 @@ struct FailingReleasesProvider: ReleasesProviding {
 /// Sample release data and updaters without network access, for the view gallery of the
 /// example app.
 enum ExampleData {
+  /// Fake App Translocation path. No app exists here.
+  static let translocatedInstallLocation = URL(
+    fileURLWithPath: "/private/var/folders/example/T/AppTranslocation/EXAMPLE/d/Example.app")
+
   /// `UserDefaults` key prefix that `SkipAndRemindStore` and `UpdatePreferencesStore` use
   /// to persist the updater state of this app.
   static var userDefaultsKeyPrefix: String {
@@ -101,7 +107,10 @@ enum ExampleData {
       ? FailingReleasesProvider()
       : StaticReleasesProvider(releases: releases(for: config))
     return SunshineUpdater(
-      configuration: SunshineConfiguration(owner: exampleOwner, repo: exampleRepo),
+      configuration: SunshineConfiguration(
+        owner: exampleOwner, repo: exampleRepo,
+        installLocation: config.simulatesUnsuitableLocation ? Self.translocatedInstallLocation : nil
+      ),
       releasesProvider: provider
     )
   }

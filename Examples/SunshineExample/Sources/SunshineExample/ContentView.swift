@@ -10,6 +10,7 @@ enum ExampleScreen: String, CaseIterable, Identifiable {
   case downloadProgress = "Download Progress"
   case configuration = "Configuration"
   case notifications = "Notifications"
+  case moveToApplications = "Move to Applications"
 
   var id: String { rawValue }
 }
@@ -91,7 +92,75 @@ private struct UpdaterHost: View {
       }
     case .notifications:
       NotificationsTestView()
+    case .moveToApplications:
+      MoveToApplicationsTestView(
+        controller: controller,
+        simulatesUnsuitableLocation: $releaseConfig.simulatesUnsuitableLocation)
     }
+  }
+}
+
+/// Screen that exercises the move-to-Applications feature.
+/// The automatic offer appears only if the app runs from a disk image, an App Translocation
+/// path, a read-only volume, or an unwritable folder. The forced move works from any
+/// location. Both need a `.app` bundle, so run this app with `strudel run`, not `swift run`.
+private struct MoveToApplicationsTestView: View {
+  @ObservedObject var controller: SunshineUpdaterUIController
+  @Binding var simulatesUnsuitableLocation: Bool
+
+  /// Preference key the offer alert writes if the user ticks "Do not ask again".
+  private static let suppressKey = "SunshineSuppressMoveToApplicationsAlert"
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Install location").font(.headline)
+        Text(controller.updater.shouldOfferMoveToApplications ? "Unsuitable" : "Suitable")
+        Text(Bundle.main.bundleURL.path)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+        Toggle("Simulate translocated location", isOn: $simulatesUnsuitableLocation)
+        Text(
+          "Points the updater at a fake App Translocation path, so the offer below shows its alert. Choosing Move then fails, because no app exists at that path."
+        )
+        .font(.caption)
+        .foregroundStyle(.tertiary)
+      }
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("1. Offer to move").font(.headline)
+        Text(
+          "Calls `offerToMoveToApplicationsIfNeeded()`, which an app calls once at launch. It does nothing in a suitable location. To see the alert, copy this app into a disk image and open it from there."
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        HStack {
+          Button("Offer to Move") { controller.offerToMoveToApplicationsIfNeeded() }
+          Button("Reset \"Do Not Ask Again\"") {
+            UserDefaults.standard.removeObject(forKey: Self.suppressKey)
+          }
+        }
+      }
+
+      Divider()
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("2. Move now").font(.headline)
+        Text(
+          "Calls `moveToApplicationsAndRelaunch()` regardless of location. The app is copied to `/Applications`, or to `~/Applications` if that is not writable. The copy is launched and this process exits."
+        )
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        Button("Move to Applications Now") {
+          try? controller.updater.moveToApplicationsAndRelaunch()
+        }
+      }
+    }
+    .padding()
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 }
 
