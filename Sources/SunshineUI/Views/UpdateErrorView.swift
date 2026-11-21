@@ -5,6 +5,8 @@ public struct UpdateErrorView: View {
   let message: String
   let releaseURL: URL?
 
+  @Environment(\.dismiss) private var dismiss
+
   public init(message: String, releaseURL: URL? = nil) {
     self.message = message
     self.releaseURL = releaseURL
@@ -16,10 +18,16 @@ public struct UpdateErrorView: View {
         .font(.headline)
       Text(message)
         .fixedSize(horizontal: false, vertical: true)
-      if let releaseURL {
-        Link("Download the update manually", destination: releaseURL)
+      HStack {
+        if let releaseURL {
+          Link("Download the update manually", destination: releaseURL)
+        }
+        Spacer()
+        Button("Dismiss") { dismiss() }
+          .keyboardShortcut(.defaultAction)
       }
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(20)
     .frame(width: 380)
   }
