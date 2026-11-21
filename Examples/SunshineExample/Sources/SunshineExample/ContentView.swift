@@ -72,6 +72,9 @@ private struct UpdaterHost: View {
         if controller.pendingUpdate == nil && controller.errorMessage == nil {
           NoPendingUpdateView(controller: controller)
         }
+        Toggle("Simulate Error", isOn: $releaseConfig.simulatesError)
+          .padding(16)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         UpdateIndicatorView(controller: controller, appName: "Example App")
           .padding(16)
       }

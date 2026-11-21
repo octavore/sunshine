@@ -12,6 +12,23 @@ struct ExampleReleaseConfig: Hashable {
   var latestVersion: String = "2.1.0"
   var includeReleaseNotes: Bool = true
   var isPrerelease: Bool = false
+  /// Makes every release fetch fail, so the error state can be shown.
+  var simulatesError: Bool = false
+}
+
+/// A `ReleasesProviding` conformer whose fetches always fail.
+struct FailingReleasesProvider: ReleasesProviding {
+  /// Timeout error with the description `URLSession` attaches to real ones.
+  private static let timeout = URLError(
+    .timedOut, userInfo: [NSLocalizedDescriptionKey: "The request timed out."])
+
+  func fetchLatestRelease(owner: String, repo: String) async throws -> GitHubRelease {
+    throw SunshineError.network(underlying: Self.timeout)
+  }
+
+  func fetchRecentReleases(owner: String, repo: String) async throws -> [GitHubRelease] {
+    throw SunshineError.network(underlying: Self.timeout)
+  }
 }
 
 /// Sample release data and network-free updaters for the example app's view gallery.
@@ -77,9 +94,13 @@ enum ExampleData {
   /// example app always shows the same fixed release data.
   @MainActor
   static func updater(config: ExampleReleaseConfig = ExampleReleaseConfig()) -> SunshineUpdater {
-    SunshineUpdater(
+    let provider: any ReleasesProviding =
+      config.simulatesError
+      ? FailingReleasesProvider()
+      : StaticReleasesProvider(releases: releases(for: config))
+    return SunshineUpdater(
       configuration: SunshineConfiguration(owner: exampleOwner, repo: exampleRepo),
-      releasesProvider: StaticReleasesProvider(releases: releases(for: config))
+      releasesProvider: provider
     )
   }
 }
