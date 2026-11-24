@@ -263,6 +263,11 @@ public final class SunshineUpdaterUIController: ObservableObject {
     updater.cancelDownload()
   }
 
+  /// Clear the error. The corner indicator hides if no update is pending.
+  public func dismissErrorTapped() {
+    errorMessage = nil
+  }
+
   public func remindLaterTapped() {
     guard let pendingUpdate else { return }
     updater.remindLater(pendingUpdate)

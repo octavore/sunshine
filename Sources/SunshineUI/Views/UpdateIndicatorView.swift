@@ -44,7 +44,10 @@ public struct UpdateIndicatorView: View {
       .buttonStyle(.plain)
       .popover(isPresented: $isPresentingPopover, arrowEdge: .bottom) {
         if let message = controller.errorMessage {
-          UpdateErrorView(message: message, releaseURL: controller.pendingUpdate?.htmlURL)
+          UpdateErrorView(
+            message: message,
+            releaseURL: controller.pendingUpdate?.htmlURL,
+            onDismiss: { controller.dismissErrorTapped() })
         } else {
           UpdateAvailableView(controller: controller, appName: appName, appIcon: appIcon)
         }

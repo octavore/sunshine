@@ -4,12 +4,15 @@ import SwiftUI
 public struct UpdateErrorView: View {
   let message: String
   let releaseURL: URL?
+  let onDismiss: (() -> Void)?
 
   @Environment(\.dismiss) private var dismiss
 
-  public init(message: String, releaseURL: URL? = nil) {
+  /// - Parameter onDismiss: Called after the view dismisses itself.
+  public init(message: String, releaseURL: URL? = nil, onDismiss: (() -> Void)? = nil) {
     self.message = message
     self.releaseURL = releaseURL
+    self.onDismiss = onDismiss
   }
 
   public var body: some View {
@@ -23,8 +26,11 @@ public struct UpdateErrorView: View {
           Link("Download the update manually", destination: releaseURL)
         }
         Spacer()
-        Button("Dismiss") { dismiss() }
-          .keyboardShortcut(.defaultAction)
+        Button("Dismiss") {
+          dismiss()
+          onDismiss?()
+        }
+        .keyboardShortcut(.defaultAction)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
